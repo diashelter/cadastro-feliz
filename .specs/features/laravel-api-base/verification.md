@@ -51,6 +51,8 @@
 | C41 | `tests/infra/docs.sh` `LV41 help lists laravel targets` | sim |
 | C42 | `tests/infra/laravel.sh` `LV42 broken lock fails build commands` | sim |
 | C43 | `tests/infra/laravel.sh` `LV43 laravel-composer propagates composer failure` | sim - além do código, confere que o lock não mudou |
+| C44 | `tests/infra/laravel.sh` `LV44 api exposes only health` | sim - compara a lista inteira de `uri` de `route:list --json` com `["health"]` (qualquer rota a mais falha) e exige `404` em `GET` e `PUT /storage/x`; com `'serve' => true` a lista tinha `storage/{path}` e as duas respostas eram `403` |
+| C45 | `tests/infra/laravel.sh` `LV45 laravel defaults use no table` | sim - compara os cinco valores exatos no `php-fpm` em execução, cujo `environment` não define `DB_CONNECTION`, `SESSION_DRIVER`, `CACHE_STORE`, `QUEUE_CONNECTION` nem `LOG_CHANNEL`, e sem `bootstrap/cache/config.php`, então lê os padrões do código; o mesmo snippet com `SESSION_DRIVER=database` e `CACHE_STORE=database` devolveu `["pgsql","database","database","sync","stderr"]`, o que falharia |
 
 ## Findings
 
