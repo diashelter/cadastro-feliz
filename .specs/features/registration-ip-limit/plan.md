@@ -1,6 +1,6 @@
 # Limite de cadastros por IP
 
-**Approved**: pending
+**Approved**: 2026-11-04 - user: "aprovado, pode seguir com as suposições"
 
 ## Problem
 
@@ -80,7 +80,7 @@ sequenceDiagram
 | --- | --- |
 | domain | "429" passa a ter duas causas, o par IP + e-mail e a cota do IP, com o mesmo corpo e sem `code` de topo (decisão 14 permite acrescentar um depois); "tentativa" continua sendo só a do par |
 | stored data | nada a migrar - o `redis-limiter` não persiste nada, e a chave nova não colide com `registration:attempts:*` |
-| readers | o formulário (ainda não construído, `.specs/features/registration-form`) passa a mostrar um texto de 429 que vale para os dois limites; `make reset-limits` já esvazia o `redis-limiter` inteiro e passa a limpar também a cota |
+| readers | o formulário (ainda não construído, `.specs/features/registration-form`) passa a mostrar um texto de 429 que vale para os dois limites; `make reset-limits` já esvazia o `redis-limiter` inteiro e passa a limpar também a cota; o C9 de `.specs/features/shared-infrastructure/checks.md` afirma 22 variáveis em docs/infrastructure.md e muda para 24 junto com essa afirmação |
 | docs | `docs/api-contract.md` perde a limitação "Sem limite só por IP" e ganha a cota; o README ganha a cota na tabela da API; a decisão vira a 17, porque a 15 reservada pelo design foi usada pelo golang-migrate |
 
 ```mermaid
@@ -173,10 +173,10 @@ Variáveis, cenários e a decisão acompanham o contrato.
 
 | Assumption | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Escopo sem stacks | Esta rodada muda contrato, configuração e testes dos scripts; nenhum código de stack | não há stack para mudar, e o design pede a regra no contrato primeiro | n |
-| Número da decisão | 17 | a 15 reservada no design foi usada pelo golang-migrate, e a 16 pelo container do frontend | n |
-| Janela depois de devolver tudo | quando uma devolução leva o uso a 0, a próxima reserva recomeça a janela | o `EXPIRE` só roda quando o `INCR` resulta em 1; é o mesmo que a chave nunca ter sido usada | n |
-| Prova dos scripts | `tests/infra/limiter.sh` extrai os blocos `lua` de › Operação no Redis e os executa por `EVAL` no `redis-limiter` | o documento é o que as stacks copiam; testar uma cópia provaria outra coisa | n |
+| Escopo sem stacks | Esta rodada muda contrato, configuração e testes dos scripts; nenhum código de stack | não há stack para mudar, e o design pede a regra no contrato primeiro | y |
+| Número da decisão | 17 | a 15 reservada no design foi usada pelo golang-migrate, e a 16 pelo container do frontend | y |
+| Janela depois de devolver tudo | quando uma devolução leva o uso a 0, a próxima reserva recomeça a janela | o `EXPIRE` só roda quando o `INCR` resulta em 1; é o mesmo que a chave nunca ter sido usada | y |
+| Prova dos scripts | `tests/infra/limiter.sh` extrai os blocos `lua` de › Operação no Redis e os executa por `EVAL` no `redis-limiter` | o documento é o que as stacks copiam; testar uma cópia provaria outra coisa | y |
 
 **Open questions:** none - all resolved or logged above.
 

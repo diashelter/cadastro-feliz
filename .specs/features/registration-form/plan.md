@@ -1,6 +1,6 @@
 # Formulário de cadastro
 
-**Approved**: pending
+**Approved**: 2026-11-04 - user: "aprovado, pode seguir com as suposições"
 
 ## Problem
 
@@ -190,13 +190,13 @@ Os testes do frontend rodam com Docker e `make`, sobre o código atual, sem mexe
 | --- | --- | --- | --- |
 | Validação no navegador | nenhuma; o formulário envia o que foi digitado | user: "1 e 2 conforme recomendado, pode seguir" | y |
 | Campos depois de qualquer resposta | continuam preenchidos | user: "1 e 2 conforme recomendado, pode seguir" | y |
-| Rótulos | campos `Nome` e `E-mail`, botão `Cadastrar`, e `Enviando…` durante a requisição | o contrato não define rótulos; são os termos que ele já usa | n |
-| Texto do 429 sem prazo | `Muitas tentativas de cadastro. Tente novamente mais tarde.` | não inventar um prazo que a API não deu | n |
-| Título e endereço da API na página | ficam, vindos de `page`, acima do formulário | mostram para onde o formulário envia, e os testes FE1, FE3, FE4 e FE14 já dependem deles | n |
-| Validação da forma do erro | escrita à mão em `registrationSchema`, sem biblioteca | são dois campos e uma lista; uma biblioteca seria uma dependência a mais para isso | n |
-| Visual | HTML semântico com CSS mínimo, sem biblioteca de componentes nem de estilo | design: o formulário é coadjuvante | n |
-| Lugar dos testes | ao lado do código do módulo `registration` | como no exemplo `with-vitest` do Next.js | n |
-| Ordem entre as rodadas | depois de `.specs/features/registration-ip-limit`, que muda o texto do 429 no contrato | as duas tocam a mesma linha de › Comportamento do frontend | n |
+| Rótulos | campos `Nome` e `E-mail`, botão `Cadastrar`, e `Enviando…` durante a requisição | o contrato não define rótulos; são os termos que ele já usa | y |
+| Texto do 429 sem prazo | `Muitas tentativas de cadastro. Tente novamente mais tarde.` | não inventar um prazo que a API não deu | y |
+| Título e endereço da API na página | ficam, vindos de `page`, acima do formulário | mostram para onde o formulário envia, e os testes FE1, FE3, FE4 e FE14 já dependem deles | y |
+| Validação da forma do erro | escrita à mão em `registrationSchema`, sem biblioteca | são dois campos e uma lista; uma biblioteca seria uma dependência a mais para isso | y |
+| Visual | HTML semântico com CSS mínimo, sem biblioteca de componentes nem de estilo | design: o formulário é coadjuvante | y |
+| Lugar dos testes | ao lado do código do módulo `registration` | como no exemplo `with-vitest` do Next.js | y |
+| Ordem entre as rodadas | depois de `.specs/features/registration-ip-limit`, que muda o texto do 429 no contrato | as duas tocam a mesma linha de › Comportamento do frontend | y |
 
 **Open questions:** none - all resolved or logged above.
 
