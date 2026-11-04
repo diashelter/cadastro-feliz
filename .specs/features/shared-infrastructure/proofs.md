@@ -1,9 +1,9 @@
 # shared-infrastructure proofs
 
-**HEAD**: 67153a6
+**HEAD**: 4473a0c
 **Tree**: clean
 **Shell**: /bin/sh
-**Result**: 29 pass, 0 fail
+**Result**: 30 pass, 0 fail
 
 | Check | Proof | Result |
 | --- | --- | --- |
@@ -33,6 +33,7 @@
 | C23 | `run infra / PASS C23 reset-limits empties limiter` | pass |
 | C24 | `run infra / PASS C24 status lists containers` | pass |
 | C25 | `run infra / PASS C25 logs-shared follows logs` | pass |
+| C29 | `run infra / PASS C29 status lists stack containers` | pass |
 | C26 | `run infra / PASS C26 decision 15 recorded` | pass |
 | C27 | `run infra / PASS C27 docs describe existing files` | pass |
 | C28 | `run infra / PASS C28 database docs name the tool` | pass |
@@ -42,7 +43,6 @@
 `Run infra` - exit 0
 
 ```
-PASS C8 up-shared fails on taken port 5432
 PASS C10 migration 0001 equals docs schema
 PASS C11 migrate on empty database
 PASS C12 migrate rerun changes nothing
@@ -53,6 +53,7 @@ PASS C16 missing stack refused
 PASS C17 unknown stack refused
 PASS C18 up-stack runs shared and migrate first
 PASS C19 up-stack takes other stacks down
+PASS C29 status lists stack containers
 PASS C21 down-stack keeps shared data
 PASS C22 down keeps only postgres volume
 PASS C20 up-stack stops when migrate fails
