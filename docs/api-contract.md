@@ -1,6 +1,6 @@
 # Contrato da API
 
-> **Status:** em design. Este documento descreve o comportamento planejado. Nada foi implementado ainda.
+> **Status:** em construção. Nenhuma stack implementa `POST /users` ainda. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
 
 As três stacks expõem exatamente o mesmo contrato em `http://localhost:8080`. O frontend não sabe qual delas está respondendo.
 

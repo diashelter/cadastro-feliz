@@ -1,6 +1,6 @@
 # Stacks
 
-> **Status:** em design. As estruturas e os containers abaixo são planejados. As versões serão fixadas na implementação.
+> **Status:** em construção. As três stacks estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
 
 ## Visão geral
 

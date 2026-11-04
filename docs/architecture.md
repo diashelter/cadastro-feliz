@@ -1,6 +1,6 @@
 # Arquitetura
 
-> **Status:** em design. Este documento descreve o comportamento planejado. Nada foi implementado ainda.
+> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A API, o relay e o worker descritos aqui ainda não foram implementados em nenhuma stack, então este documento descreve o comportamento planejado para eles.
 
 ## O problema
 
