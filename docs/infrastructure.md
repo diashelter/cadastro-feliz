@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados e o `.env.example` existem e são testados por `make test-infra`. O serviço `frontend` e os composes das stacks ainda não existem.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`. Os composes das stacks ainda não foram criados.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose, além do `make`.
 
@@ -76,8 +76,10 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 
 | Alvo | O que faz |
 |---|---|
-| `make up-shared` | Cria `.env` a partir de `.env.example` se ele não existir, cria a rede e sobe os serviços compartilhados, esperando que fiquem saudáveis |
-| `make migrate` | Aplica as migrations pendentes; sobe os serviços compartilhados antes, se necessário |
+| `make up-shared` | Cria `.env` a partir de `.env.example` se ele não existir, cria a rede e sobe os serviços compartilhados, esperando que fiquem saudáveis. Sobe o `postgres`, o `redis-limiter` e o `mailpit` primeiro e depois reconstrói e sobe o `frontend`, então uma falha no build do frontend não derruba os outros |
+| `make migrate` | Aplica as migrations pendentes; sobe `postgres`, `redis-limiter` e `mailpit` antes, se necessário, sem construir o `frontend` |
+| `make watch-frontend` | Reconstrói e sobe o `frontend` e fica em primeiro plano copiando cada edição de `frontend/src` para o container. Uma mudança em `package.json`, `package-lock.json` ou `next.config.ts` reconstrói a imagem. Ctrl+C encerra só a sincronização |
+| `make frontend-npm ARGS="<comando npm>"` | Roda o npm do frontend em um container descartável, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `frontend/` |
 | `make up-laravel` | Sobe a stack Laravel |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |
@@ -97,7 +99,7 @@ Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `lara
 
 1. Cria `.env` e a rede externa, se ainda não existirem.
 2. Derruba as outras stacks.
-3. Sobe os serviços compartilhados e espera o PostgreSQL, o `redis-limiter` e o Mailpit ficarem saudáveis.
+3. Sobe o PostgreSQL, o `redis-limiter` e o Mailpit e espera que fiquem saudáveis. O `frontend` não é construído nem iniciado aqui; ele sobe com `make up-shared`.
 4. Executa o `migrate`. Se ele falha, o comando para com código diferente de zero e a stack não sobe.
 5. Sobe a stack e espera seus containers ficarem no ar.
 
@@ -111,6 +113,7 @@ O Compose não ordena serviços de projetos diferentes, por isso essa ordem é r
 | `redis-limiter` | `redis:8.10.3-alpine` |
 | `mailpit` | `axllent/mailpit:v1.33.0` |
 | `migrate` | `migrate/migrate:v4.20.1` |
+| `frontend` | `cadastro-feliz-shared-frontend`, construída de `frontend/Dockerfile` sobre `node:26.13.0-alpine`, com `next` 16.4.5 e `react` 19.3.1 fixados em `frontend/package.json` |
 
 ### O que cada `down` faz com os dados
 
@@ -120,6 +123,15 @@ O Compose não ordena serviços de projetos diferentes, por isso essa ordem é r
 | `make down` | Remove todos | Descarta | Descarta | Mantém |
 
 Descartar a fila é seguro porque a fonte da verdade é o PostgreSQL. O relay da próxima stack publica de novo o que estiver pendente. Os e-mails capturados pelo Mailpit são perdidos quando o container dele é removido, o que só ocorre em `make down`.
+
+## Container do frontend
+
+O `frontend` roda `next dev` na porta 3000, como o usuário `node`. Não há build de produção, porque o que esta POC estuda é a API e o outbox (decisão 16 de [decisions.md](decisions.md)).
+
+- **O código entra por cópia, não por bind mount.** A imagem leva o código e as dependências. Com `make watch-frontend` rodando, cada edição de `frontend/src` é copiada para o container, onde o Turbopack recompila sem reiniciar. Sem o watch, `make up-shared` reconstrói a imagem com o código atual.
+- **Dependências mudam só por `make frontend-npm`.** O `package-lock.json` é a fonte do `npm ci` da imagem, e `frontend/.npmrc` grava versões exatas. `node_modules` nunca existe na máquina.
+- **`NEXT_PUBLIC_API_URL` é lido quando o container inicia.** Trocar o valor no `.env` e rodar `make up-shared` recria o container sem reconstruir a imagem.
+- **Saudável é responder HTTP.** Um erro de compilação aparece no navegador e não deixa o serviço `unhealthy`.
 
 ## Comunicação do frontend
 

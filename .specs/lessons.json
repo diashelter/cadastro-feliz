@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 5,
+  "next_id": 8,
   "lessons": [
     {
       "id": "L-001",
@@ -76,6 +76,60 @@
       ],
       "created": "2026-11-04T16:42:36Z",
       "last_seen": "2026-11-04T16:42:36Z"
+    },
+    {
+      "id": "L-005",
+      "key": "weak_test::an order check over a doc section must match only the command lines not prose that names the same command",
+      "text": "An order check over a doc section must match only the command lines, not prose that names the same command.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "frontend-container"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C26 tests/infra/docs.sh t_fe26_readme (infra)"
+      ],
+      "created": "2026-11-04T18:38:23Z",
+      "last_seen": "2026-11-04T18:38:23Z"
+    },
+    {
+      "id": "L-006",
+      "key": "weak_test::a claim that a container runs as the caller s uid must be proven by a non root caller since root owns everything it touches",
+      "text": "A claim that a container runs as the caller's uid must be proven by a non-root caller, since root owns everything it touches.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "frontend-container"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C18 tests/infra/frontend.sh t_fe18_npm_exact (infra)"
+      ],
+      "created": "2026-11-04T18:38:23Z",
+      "last_seen": "2026-11-04T18:38:23Z"
+    },
+    {
+      "id": "L-007",
+      "key": "weak_test::a claim about one section of a json file must read that section not grep the whole file",
+      "text": "A claim about one section of a JSON file must read that section, not grep the whole file.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "frontend-container"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C18 tests/infra/frontend.sh t_fe18_npm_exact (infra)"
+      ],
+      "created": "2026-11-04T18:38:24Z",
+      "last_seen": "2026-11-04T18:38:24Z"
     }
   ]
 }

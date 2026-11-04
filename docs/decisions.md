@@ -21,6 +21,7 @@
 | [13](#13-escopo-das-convenções-do-agentsmd) | Escopo das convenções do `AGENTS.md` | Proposta |
 | [14](#14-forma-única-das-respostas-de-erro) | Forma única das respostas de erro | Definida |
 | [15](#15-golang-migrate-como-ferramenta-de-migrations) | golang-migrate como ferramenta de migrations | Proposta |
+| [16](#16-frontend-em-next-dev-com-o-código-copiado-pelo-compose-watch) | Frontend em `next dev` com o código copiado pelo Compose Watch | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -146,3 +147,21 @@ O container `migrate` usa o golang-migrate (`migrate/migrate:v4.20.1`) para apli
 **Alternativa descartada:** um script com `psql -f` sobre todos os arquivos não sabe o que já foi aplicado e falha na segunda execução.
 
 **Custo:** trocar de ferramenta depois exige migrar o controle de versão, porque `schema_migrations` fica no banco que as três stacks compartilham.
+
+## 16. Frontend em `next dev` com o código copiado pelo Compose Watch
+
+O container do `frontend` roda sempre `next dev`, e o código entra na imagem por cópia. `make watch-frontend` usa o Compose Watch para copiar cada edição de `frontend/src` para o container e reconstruir a imagem quando `package.json`, `package-lock.json` ou `next.config.ts` mudam. Dependências mudam só por `make frontend-npm`, e `node_modules` nunca existe na máquina. O detalhamento está no [design](../.design/frontend-container.md).
+
+**Motivos**
+- **Só Docker e `make`:** quem edita o formulário não precisa de Node na máquina.
+- **macOS:** o guia de desenvolvimento local do Next.js avisa que, no Docker Desktop, os eventos de arquivo de um bind mount podem atrasar ou se perder. Com a cópia, o evento nasce dentro do container e o Turbopack o recebe como no Linux.
+- **Sem produção:** o formulário é igual nas três stacks, e o que se estuda é a API e o outbox.
+
+**Alternativas descartadas**
+- **Bind mount de `frontend/`:** mais simples, mas não confiável no Docker Desktop do macOS. O paliativo comum, `WATCHPACK_POLLING`, só vale para o webpack e não tem efeito no Turbopack, o padrão do Next.js 16.
+- **Synchronized file shares do Docker Desktop:** exige assinatura paga.
+- **Build de produção com saída standalone:** cada edição exigiria reconstruir a imagem.
+
+**Custos**
+- Editar com recarga automática exige um terminal com `make watch-frontend` aberto.
+- O container não se parece com produção, e a primeira página de cada container novo demora alguns segundos para compilar.

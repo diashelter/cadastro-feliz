@@ -143,6 +143,10 @@ apis/golang/
 
 Um único projeto Next.js atende às três stacks. Ele não tem lógica específica de nenhuma delas e aponta sempre para `http://localhost:8080`.
 
+O container roda `next dev`, com o código copiado na imagem. Para editar com recarga automática, use `make watch-frontend`; para acrescentar uma dependência, `make frontend-npm ARGS="install <pacote>"`. Detalhes em [infrastructure.md](infrastructure.md#container-do-frontend).
+
+Hoje existe só o esqueleto (`src/app/layout.tsx` e `src/app/page.tsx`); o módulo `registration` chega com o formulário.
+
 ```txt
 frontend/
 ├── Dockerfile
