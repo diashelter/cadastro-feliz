@@ -140,5 +140,7 @@ Proof: run infra | PASS RF27 docs describe the form and test-frontend
 
 - **Settled mid-build:** none
 - **Dispatched:** none
-- **Boundary:** none closed
-- **Abandoned:** none
+- **Boundary:** C1-C27 built at `12fa415`; C1-C16 green no host (Node 22, `tsc --noEmit` e `vitest run`, 26 testes), C25-C27 green em `bash tests/infra/run.sh docs`, C17 walked; C18-C24 e os leitores FE1/FE3/FE4/FE9/FE14 precisam da imagem do frontend, que não constrói neste ambiente
+- **Abandoned:** `vitest` 5.1.0 - pede `@types/node` ≥ 22 e o projeto fixa 20.19.43; ficou `vitest` 4.1.12, que aceita 20. As dependências entraram pelo npm 11 do host (`npx npm@11`), porque `make frontend-npm` precisa de rede dentro do container e o npm 10 do host falha com `edgesOut`
+- **Environment:** Docker sem rede dentro dos containers: o `npm ci` do Dockerfile falha, então `make test-frontend` e os testes de `tests/infra/frontend.sh` e `tests/infra/test-frontend.sh` não rodam aqui; rodam numa máquina com Docker e acesso ao registro do npm
+- **Walked:** `next dev` no host com `NEXT_PUBLIC_API_URL=http://localhost:8080` e nada escutando em 8080; no Chromium, abrir `localhost:3000`, preencher `Ana Souza` e `ana@example.com` e usar `Cadastrar`: a página mostrou `Serviço indisponível no momento. Tente novamente em instantes.`, os campos continuaram preenchidos e o botão voltou a `Cadastrar` habilitado (C17). O `next dev` 16.4.5 gera `AGENTS.md` na pasta em que roda; no container isso fica em `/app` e não chega à máquina
