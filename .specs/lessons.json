@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 20,
+  "next_id": 24,
   "lessons": [
     {
       "id": "L-001",
@@ -346,6 +346,78 @@
       ],
       "created": "2026-11-04T20:09:40Z",
       "last_seen": "2026-11-04T20:09:40Z"
+    },
+    {
+      "id": "L-020",
+      "key": "ac_gap::a new framework skeleton can register routes of its own assert the route list equals what surface declares",
+      "text": "A new framework skeleton can register routes of its own; assert the route list equals what Surface declares.",
+      "signal": "ac_gap",
+      "scope": "laravel",
+      "status": "candidate",
+      "features": [
+        "laravel-api-base"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apis/laravel/config/filesystems.php:36 (C44) (laravel)"
+      ],
+      "created": "2026-11-04T23:17:51Z",
+      "last_seen": "2026-11-04T23:17:51Z"
+    },
+    {
+      "id": "L-021",
+      "key": "weak_test::a claim that ci installs a pinned tool is proven by the pinned download and checksum lines not by the step name",
+      "text": "A claim that CI installs a pinned tool is proven by the pinned download and checksum lines, not by the step name.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-api-base"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "tests/infra/laravel.sh t_lv34_ci (C34) (infra)"
+      ],
+      "created": "2026-11-04T23:17:51Z",
+      "last_seen": "2026-11-04T23:17:51Z"
+    },
+    {
+      "id": "L-022",
+      "key": "weak_test::headers a contract fixes for every status are asserted on every status not only on the success case",
+      "text": "Headers a contract fixes for every status are asserted on every status, not only on the success case.",
+      "signal": "weak_test",
+      "scope": "laravel",
+      "status": "candidate",
+      "features": [
+        "laravel-api-base"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "apis/laravel/tests/Feature/Health/HealthTest.php (C22) (laravel)"
+      ],
+      "created": "2026-11-04T23:17:51Z",
+      "last_seen": "2026-11-04T23:17:51Z"
+    },
+    {
+      "id": "L-023",
+      "key": "weak_test::a config default is proven in the running container since the test runner s own env overrides it",
+      "text": "A config default is proven in the running container, since the test runner's own env overrides it.",
+      "signal": "weak_test",
+      "scope": "laravel",
+      "status": "candidate",
+      "features": [
+        "laravel-api-base"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "tests/infra/laravel.sh t_lv45_no_table_defaults (C45) (laravel)"
+      ],
+      "created": "2026-11-04T23:17:51Z",
+      "last_seen": "2026-11-04T23:17:51Z"
     }
   ]
 }
