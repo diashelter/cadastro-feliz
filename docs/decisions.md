@@ -23,6 +23,7 @@
 | [15](#15-golang-migrate-como-ferramenta-de-migrations) | golang-migrate como ferramenta de migrations | Proposta |
 | [16](#16-frontend-em-next-dev-com-o-código-copiado-pelo-compose-watch) | Frontend em `next dev` com o código copiado pelo Compose Watch | Definida |
 | [17](#17-cota-de-cadastros-concluídos-por-ip) | Cota de cadastros concluídos por IP | Definida |
+| [18](#18-formulário-sem-validação-no-navegador) | Formulário sem validação no navegador | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -185,3 +186,17 @@ Cada IP pode concluir no máximo `REGISTRATION_MAX_PER_IP` (20) cadastros a cada
 - Pessoas atrás do mesmo IP dividem a cota.
 - Uma devolução que falha deixa a cota com uma unidade a mais até a janela expirar.
 - As três stacks mantêm cópias de mais dois scripts Lua.
+
+## 18. Formulário sem validação no navegador
+
+O formulário envia nome e e-mail exatamente como foram digitados, sem `trim` e sem nenhuma regra no navegador: nenhum `required`, `maxlength` ou `pattern`, e o campo de e-mail é texto, porque um campo `type="email"` tira os espaços das pontas. Todo erro de campo exibido vem da API, traduzido pelo par `field` + `code`. O detalhamento está no [design](../.design/registration-form.md).
+
+**Motivos**
+- **A POC exercita a API:** um formulário em branco gera um 422 da API, e assim o cenário 3 de [architecture.md](architecture.md#cenários-para-validar-a-implementação) pode ser reproduzido pelo formulário.
+- **Uma só fonte das regras:** as regras de validação vivem nas três stacks; repeti-las no navegador seria uma quarta cópia.
+
+**Alternativas descartadas**
+- **Espelhar as regras do contrato no cliente:** a experiência seria melhor, mas o 422 só apareceria por `curl`.
+
+**Custos**
+- Cada erro de digitação custa uma requisição, que não conta como tentativa, porque o 422 não conta.

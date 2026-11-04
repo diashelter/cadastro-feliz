@@ -91,7 +91,7 @@ shared_healthy() {
 
 # Sem argumentos roda todos os arquivos; com argumentos, só os nomeados, como em
 # `bash tests/infra/run.sh docs limiter`.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh)
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh)
 if [ "$#" -gt 0 ]; then
   FILES=()
   for name in "$@"; do

@@ -36,7 +36,7 @@ define stack_down
 
 endef
 
-.PHONY: help env network up-shared migrate watch-frontend frontend-npm down status logs-shared reset-limits test-infra
+.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend down status logs-shared reset-limits test-infra
 
 help:
 	@echo "Alvos:"
@@ -44,6 +44,7 @@ help:
 	@echo "  make migrate            aplica as migrations pendentes"
 	@echo "  make watch-frontend     sincroniza as edições de frontend/src com o container"
 	@echo "  make frontend-npm       roda o npm do frontend: make frontend-npm ARGS=\"install <pacote>\""
+	@echo "  make test-frontend      checa os tipos e roda os testes do frontend"
 	@echo "  make up-<stack>         sobe uma stack (laravel, nest, go) e derruba as outras"
 	@echo "  make down-<stack>       derruba uma stack, mantendo os serviços comuns"
 	@echo "  make down               derruba tudo, menos o volume do PostgreSQL"
@@ -80,6 +81,12 @@ frontend-npm:
 	$(SHARED) run --rm --no-deps --user "$$(id -u):$$(id -g)" \
 		--env HOME=/tmp --env npm_config_package_lock_only=true \
 		--volume "$(CURDIR)/frontend:/app" frontend npm $(ARGS)
+
+# Constrói a imagem com o código atual e roda os testes num container descartável:
+# o container do frontend em execução não é recriado nem parado.
+test-frontend: env network
+	$(SHARED) build frontend
+	$(SHARED) run --rm --no-deps frontend npm test
 
 up-%:
 	$(call require_stack,$*)

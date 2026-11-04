@@ -145,11 +145,12 @@ Um único projeto Next.js atende às três stacks. Ele não tem lógica específ
 
 O container roda `next dev`, com o código copiado na imagem. Para editar com recarga automática, use `make watch-frontend`; para acrescentar uma dependência, `make frontend-npm ARGS="install <pacote>"`. Detalhes em [infrastructure.md](infrastructure.md#container-do-frontend).
 
-Hoje existe só o esqueleto (`src/app/layout.tsx` e `src/app/page.tsx`); o módulo `registration` chega com o formulário.
+A página `/` mostra o formulário de cadastro, que chama `POST /users` direto do navegador. O `registrationSchema` valida a forma das respostas de erro, não a entrada: o formulário não valida nada no navegador. Os testes usam Vitest com Testing Library e jsdom, ficam ao lado do código e rodam com `make test-frontend`, que também checa os tipos.
 
 ```txt
 frontend/
 ├── Dockerfile
+├── vitest.config.mts
 └── src/
     ├── app/page.tsx
     └── modules/registration/

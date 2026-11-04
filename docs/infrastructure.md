@@ -80,6 +80,7 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make migrate` | Aplica as migrations pendentes; sobe `postgres`, `redis-limiter` e `mailpit` antes, se necessário, sem construir o `frontend` |
 | `make watch-frontend` | Reconstrói e sobe o `frontend` e fica em primeiro plano copiando cada edição de `frontend/src` para o container. Uma mudança em `package.json`, `package-lock.json` ou `next.config.ts` reconstrói a imagem. Ctrl+C encerra só a sincronização |
 | `make frontend-npm ARGS="<comando npm>"` | Roda o npm do frontend em um container descartável, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `frontend/` |
+| `make test-frontend` | Reconstrói a imagem do `frontend` com o código atual e, num container descartável, checa os tipos e roda os testes do Vitest. Não recria nem para o `frontend` em execução |
 | `make up-laravel` | Sobe a stack Laravel |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |

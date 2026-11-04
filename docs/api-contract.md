@@ -341,14 +341,22 @@ curl -i -X POST http://localhost:8080/users \
 
 O frontend é um formulário público com os campos nome e e-mail, em `http://localhost:3000`.
 
+O formulário não valida nada no navegador: envia nome e e-mail exatamente como foram digitados, sem `trim`, e todo erro de campo exibido vem da API (decisão 18 de [decisions.md](decisions.md)). Só uma requisição sai por vez, e os campos mantêm o que foi digitado depois de qualquer resposta.
+
 | Resultado | Mensagem exibida |
 |---|---|
-| 201 | Recebemos seus dados! Em instantes você receberá um e-mail de confirmação. |
+| 201, com qualquer corpo | Recebemos seus dados! Em instantes você receberá um e-mail de confirmação. |
 | 409 ou 422 | Texto da tabela abaixo, junto de cada campo. |
+| 409 ou 422 sem nenhum item de `name` ou `email`, ou com corpo fora da forma única | Mesmo texto do 500. |
 | 429 | Muitas tentativas de cadastro. Tente novamente em {minutos} minutos. |
+| 429 sem `Retry-After` legível | Muitas tentativas de cadastro. Tente novamente mais tarde. |
 | 500 | Não foi possível concluir seu cadastro. Tente novamente em instantes. |
-| Outro status, ou corpo fora da forma do contrato | Mesmo texto do 500. |
+| Outro status | Mesmo texto do 500. |
 | Falha de rede | Serviço indisponível no momento. Tente novamente em instantes. |
+
+O 201 é sucesso sem que o corpo seja lido: o cadastro já foi gravado, e mostrar um erro levaria a pessoa a reenviar e receber um 409.
+
+Os minutos do 429 são os segundos do `Retry-After` divididos por 60 e arredondados para cima, no mínimo 1: `742` mostra 13 minutos, e de `0` a `60` mostra `1 minuto`, no singular. Um `Retry-After` legível é um inteiro decimal maior ou igual a zero; qualquer outro valor, ou a ausência do header, mostra o texto sem prazo.
 
 Cada campo mostra o texto do seu primeiro item em `errors`:
 

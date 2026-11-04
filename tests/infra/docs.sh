@@ -257,3 +257,47 @@ t_ip17_frontend_429() {
     || { note "Comportamento do frontend sem o texto genérico do 429"; return 1; }
 }
 check "IP17 frontend 429 text is generic" t_ip17_frontend_429
+
+# Formulário de cadastro (.specs/features/registration-form) - S3.
+
+t_rf25_contract() {
+  local body ok=0
+  body="$(section "$CONTRACT_DOC" 'Comportamento do frontend$')"
+  grep -qF 'não valida' <<< "$body" || { note "Comportamento do frontend sem 'não valida'"; ok=1; }
+  grep -F '201' <<< "$body" | grep -qF 'qualquer corpo' || { note "sem 201 com qualquer corpo"; ok=1; }
+  grep -F '409' <<< "$body" | grep -F '422' | grep -F '`name`' | grep -F '`email`' | grep -qF '500' \
+    || { note "sem 409 ou 422 sem item de name ou email -> texto do 500"; ok=1; }
+  grep -F 'arredondad' <<< "$body" | grep -qF 'para cima' || { note "sem a regra dos minutos"; ok=1; }
+  grep -qF '1 minuto' <<< "$body" || { note "sem '1 minuto' no singular"; ok=1; }
+  grep -qF 'Muitas tentativas de cadastro. Tente novamente mais tarde.' <<< "$body" \
+    || { note "sem o texto do 429 sem Retry-After"; ok=1; }
+  return $ok
+}
+check "RF25 contract describes form rules" t_rf25_contract
+
+t_rf26_decision() {
+  local f="$WORK/docs/decisions.md" body term
+  grep -qE '^\| \[18\]\(#18-[^)]*\) \| Formulário sem validação no navegador \| Definida \|$' "$f" \
+    || { note "índice sem a decisão 18 Definida"; return 1; }
+  body="$(section "$f" '18\. Formulário sem validação no navegador$')"
+  [ -n "$body" ] || { note "seção 18 ausente"; return 1; }
+  for term in '422' 'cenário 3'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 18 sem '$term'"; return 1; }
+  done
+}
+check "RF26 decision 18 recorded" t_rf26_decision
+
+t_rf27_docs() {
+  local body ok=0
+  body="$(section "$WORK/docs/stacks.md" 'Frontend$')"
+  grep -qF 'só o esqueleto' <<< "$body" && { note "stacks.md › Frontend ainda diz que só existe o esqueleto"; ok=1; }
+  grep -qF 'make test-frontend' <<< "$body" || { note "stacks.md › Frontend sem make test-frontend"; ok=1; }
+  section "$WORK/docs/infrastructure.md" 'Makefile$' | grep -qF '`make test-frontend`' \
+    || { note "infrastructure.md › Makefile sem make test-frontend"; ok=1; }
+  sentences "$WORK/README.md" | grep -iF 'frontend' | grep -qF 'esqueleto' \
+    && { note "README ainda descreve o frontend como esqueleto"; ok=1; }
+  section "$WORK/README.md" 'Como vai funcionar$' | grep -qx 'make test-frontend' \
+    || { note "README › Como vai funcionar sem make test-frontend"; ok=1; }
+  return $ok
+}
+check "RF27 docs describe the form and test-frontend" t_rf27_docs
