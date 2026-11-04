@@ -1,3 +1,6 @@
 .env
 __pycache__/
 .specs/features/*/proofs.md
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts

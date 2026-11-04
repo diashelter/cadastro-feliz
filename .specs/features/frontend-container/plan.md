@@ -41,9 +41,9 @@ isolamento das falhas em `up-shared`, recusa de `frontend-npm` sem argumentos, o
    Turbopack recompila; uma mudança em `package.json`, `package-lock.json` ou `next.config.ts`
    reconstrói a imagem e recria o container; Ctrl+C encerra só a vigilância
 8. `make frontend-npm ARGS="..."` -> `Makefile` (exists) - recusa sem `ARGS`; com `ARGS`, roda o npm
-   num container descartável da imagem do `frontend`, com `frontend/` montado, `node_modules` num
-   volume anônimo e o usuário de quem rodou o `make`; grava `package.json` e `package-lock.json`
-   (door 2)
+   num container descartável da imagem do `frontend`, com `frontend/` montado, o usuário de quem
+   rodou o `make` e o npm em `package-lock-only`, que não instala nada; grava só `package.json` e
+   `package-lock.json` (door 2)
 9. `make migrate` e `make up-<stack>` -> `Makefile` (exists) - sobem e esperam só `postgres`,
    `redis-limiter` e `mailpit`; não constroem nem sobem o `frontend`
 

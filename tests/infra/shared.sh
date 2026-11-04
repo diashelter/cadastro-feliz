@@ -30,7 +30,7 @@ check "C1 up-shared clean clone" t_c1_clean_clone
 t_c7_images() {
   local got expected
   got="$(cd "$WORK" && docker compose --profile '*' config --images | sort)"
-  expected="$(printf '%s\n' axllent/mailpit:v1.33.0 migrate/migrate:v4.20.1 postgres:18.6-alpine redis:8.10.3-alpine | sort)"
+  expected="$(printf '%s\n' axllent/mailpit:v1.33.0 cadastro-feliz-shared-frontend migrate/migrate:v4.20.1 postgres:18.6-alpine redis:8.10.3-alpine | sort)"
   [ "$got" = "$expected" ] || { note "imagens: $(echo $got)"; return 1; }
 }
 check "C7 pinned images" t_c7_images
@@ -38,7 +38,7 @@ check "C7 pinned images" t_c7_images
 t_c3_rerun() {
   local before after
   before="$(project_containers cadastro-feliz-shared | sort)"
-  [ "$(echo "$before" | grep -c .)" -eq 3 ] || { note "esperava 3 containers: $before"; return 1; }
+  [ "$(echo "$before" | grep -c .)" -eq 4 ] || { note "esperava 4 containers: $before"; return 1; }
   mk up-shared >/dev/null 2>&1 || return 1
   after="$(project_containers cadastro-feliz-shared | sort)"
   [ "$before" = "$after" ]
@@ -57,7 +57,7 @@ t_c5_ports() {
   ports="$(for id in $(project_containers cadastro-feliz-shared); do
     docker inspect -f '{{range $p, $b := .NetworkSettings.Ports}}{{range $b}}{{.HostPort}}{{"\n"}}{{end}}{{end}}' "$id"
   done | grep . | sort -u | paste -sd,)"
-  [ "$ports" = "5432,8025" ] || { note "portas publicadas: $ports"; return 1; }
+  [ "$ports" = "3000,5432,8025" ] || { note "portas publicadas: $ports"; return 1; }
   docker run --rm --network "$NETWORK" redis:8.10.3-alpine redis-cli -h redis-limiter -p 6379 ping 2>/dev/null \
     | grep -qx PONG || { note "redis-limiter:6379 não respondeu na rede"; return 1; }
   docker run --rm --network "$NETWORK" redis:8.10.3-alpine nc -z -w 3 mailpit 1025 \
@@ -122,3 +122,4 @@ t_c8_taken_port() {
 }
 check "C8 up-shared fails on taken port 8025" t_c8_taken_port 8025
 check "C8 up-shared fails on taken port 5432" t_c8_taken_port 5432
+check "C8 up-shared fails on taken port 3000" t_c8_taken_port 3000

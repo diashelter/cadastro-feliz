@@ -89,7 +89,7 @@ shared_healthy() {
   done
 }
 
-for f in docs.sh shared.sh migrate.sh stack.sh; do
+for f in docs.sh shared.sh migrate.sh stack.sh frontend.sh; do
   [ -f "$TESTS/$f" ] || continue
   new_workdir
   destroy_environment

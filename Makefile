@@ -12,6 +12,10 @@ COMPOSE := docker compose --env-file .env
 SHARED := $(COMPOSE) -f docker-compose.yml
 WAIT := --wait --wait-timeout 180
 
+# Os serviços de que o migrate e as stacks dependem. O frontend fica fora, para
+# uma falha dele nunca impedir o migrate nem uma stack de subir.
+BACKING := postgres redis-limiter mailpit
+
 STACKS := laravel nest go
 STACK_DIR_laravel := apis/laravel
 STACK_DIR_nest := apis/nestjs
@@ -32,12 +36,14 @@ define stack_down
 
 endef
 
-.PHONY: help env network up-shared migrate down status logs-shared reset-limits test-infra
+.PHONY: help env network up-shared migrate watch-frontend frontend-npm down status logs-shared reset-limits test-infra
 
 help:
 	@echo "Alvos:"
-	@echo "  make up-shared          sobe os serviços comuns"
+	@echo "  make up-shared          sobe os serviços comuns, o frontend incluído"
 	@echo "  make migrate            aplica as migrations pendentes"
+	@echo "  make watch-frontend     sincroniza as edições de frontend/src com o container"
+	@echo "  make frontend-npm       roda o npm do frontend: make frontend-npm ARGS=\"install <pacote>\""
 	@echo "  make up-<stack>         sobe uma stack (laravel, nest, go) e derruba as outras"
 	@echo "  make down-<stack>       derruba uma stack, mantendo os serviços comuns"
 	@echo "  make down               derruba tudo, menos o volume do PostgreSQL"
@@ -54,10 +60,26 @@ network:
 	@docker network inspect $(NETWORK) >/dev/null 2>&1 || docker network create $(NETWORK) >/dev/null
 
 up-shared: env network
-	$(SHARED) up --detach $(WAIT) postgres redis-limiter mailpit
+	$(SHARED) up --detach $(WAIT) $(BACKING)
+	$(SHARED) up --detach --build $(WAIT) frontend
 
-migrate: up-shared
+migrate: env network
+	$(SHARED) up --detach $(WAIT) $(BACKING)
 	$(SHARED) --profile tools run --rm migrate
+
+# Em primeiro plano. Ctrl+C encerra só a sincronização; o container continua no ar.
+watch-frontend: env network
+	$(SHARED) up --detach --build $(WAIT) frontend
+	$(SHARED) watch --no-up frontend
+
+# O npm roda num container descartável, com o usuário de quem chama o make, e só
+# grava package.json e package-lock.json: node_modules nunca vai para a máquina.
+frontend-npm:
+	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make frontend-npm ARGS="<comando npm>"' >&2; exit 1; }
+	@$(MAKE) --no-print-directory env network
+	$(SHARED) run --rm --no-deps --user "$$(id -u):$$(id -g)" \
+		--env HOME=/tmp --env npm_config_package_lock_only=true \
+		--volume "$(CURDIR)/frontend:/app" frontend npm $(ARGS)
 
 up-%:
 	$(call require_stack,$*)

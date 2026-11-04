@@ -58,6 +58,38 @@ services:
       start_period: 10s
       start_interval: 1s
 
+  frontend:
+    # `next dev` com o código copiado na imagem. Referência: .design/frontend-container.md.
+    # Sem bind mount: no Docker Desktop do macOS os eventos de arquivo não chegam com
+    # confiança ao Turbopack. `make watch-frontend` sincroniza as edições.
+    build: ./frontend
+    image: cadastro-feliz-shared-frontend
+    environment:
+      # Lido quando o container inicia; trocar o valor no .env não exige rebuild.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      # Saudável é responder HTTP, com qualquer status: um erro de compilação
+      # aparece no navegador e não derruba o serviço.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(() => process.exit(0), () => process.exit(1))"]
+      interval: 5s
+      timeout: 30s
+      retries: 10
+      start_period: 120s
+      start_interval: 2s
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/package-lock.json
+        - action: rebuild
+          path: ./frontend/next.config.ts
+
   migrate:
     image: migrate/migrate:v4.20.1
     # Execução única, por `make migrate`: fora do `up` dos serviços de longa duração.

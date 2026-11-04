@@ -2,7 +2,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O frontend e as três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O frontend ainda é um esqueleto, sem o formulário. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -72,11 +72,11 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 
 ## Como vai funcionar
 
-> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado.
+> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o esqueleto do frontend responde em <http://localhost:3000>.
 
 O único pré-requisito é Docker com Docker Compose, além do `make`.
 
-Subir só os serviços compartilhados e aplicar o schema:
+Subir os serviços compartilhados, o frontend incluído, e aplicar o schema. `make up-<stack>` não sobe o frontend, então rode `make up-shared` antes:
 
 ```bash
 make up-shared
@@ -130,6 +130,18 @@ make status
 make logs-laravel
 ```
 
+Editar o frontend com recarga automática. O comando fica em primeiro plano copiando cada edição de `frontend/src` para o container; Ctrl+C encerra só a sincronização:
+
+```bash
+make watch-frontend
+```
+
+Acrescentar uma dependência ao frontend, sem Node na máquina:
+
+```bash
+make frontend-npm ARGS="install <pacote>"
+```
+
 Limpar os contadores de tentativas, para repetir testes do `429`:
 
 ```bash
@@ -157,7 +169,7 @@ cadastro-feliz/
 ├── database/migrations/      # schema canônico em SQL
 ├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
-├── frontend/                 # planejado: Next.js
+├── frontend/                 # Next.js em next dev (esqueleto)
 └── apis/                     # planejado
     ├── laravel/
     ├── nestjs/
