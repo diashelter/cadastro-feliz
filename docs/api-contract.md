@@ -279,18 +279,19 @@ Os dois scripts fazem parte do contrato, como o do contador por IP + e-mail. Cad
 ```lua
 local used = tonumber(redis.call('GET', KEYS[1]) or '0')
 if used >= tonumber(ARGV[1]) then
-  return { 0, redis.call('TTL', KEYS[1]) }
+  return { 0, math.max(1, redis.call('TTL', KEYS[1])) }
 end
 used = redis.call('INCR', KEYS[1])
 if used == 1 then
   redis.call('EXPIRE', KEYS[1], ARGV[2])
 end
-return { 1, redis.call('TTL', KEYS[1]) }
+return { 1, math.max(1, redis.call('TTL', KEYS[1])) }
 ```
 
-- **Entrada:** `KEYS[1]` é a chave, `ARGV[1]` é `REGISTRATION_MAX_PER_IP` e `ARGV[2]` é `REGISTRATION_IP_WINDOW_SECONDS`.
-- **Saída:** `1` e os segundos restantes da janela quando reservou; `0` e os segundos restantes quando a cota está esgotada, sem alterar nada.
+- **Entrada:** `KEYS[1]` é a chave, `ARGV[1]` é `REGISTRATION_MAX_PER_IP`, que vale pelo menos 1, e `ARGV[2]` é `REGISTRATION_IP_WINDOW_SECONDS`.
+- **Saída:** `1` e os segundos restantes da janela quando reservou; `0` e os segundos restantes quando a cota está esgotada, sem alterar nada. Os segundos restantes valem no mínimo 1: no último meio segundo da janela o `TTL` do Redis arredonda para 0, e um `Retry-After: 0` mandaria tentar de novo antes de a janela expirar.
 - **Decisão:** com `0`, a API responde 429 e usa os segundos restantes no header `Retry-After`.
+- **Janela fixa:** só a reserva que leva o uso a 1 define a expiração; as outras reservas e as devoluções não a renovam.
 
 **Devolução**
 

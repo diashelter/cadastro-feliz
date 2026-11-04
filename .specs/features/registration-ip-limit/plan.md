@@ -27,7 +27,7 @@ projeto comum, e os demais textos são checados por `tests/infra/docs.sh`.
 
 1. quem implementa uma stack lê `docs/api-contract.md` (exists) › Ordem de processamento - valida,
    normaliza, conta o par IP + e-mail, reserva a cota do IP e só então grava; em › Limite por IP
-   encontra a chave e as regras da cota (door 1), e em › Operação no Redis os scripts de reserva e
+   encontra a chave e as regras da cota (door 1), e em › Limite por IP › Scripts da cota os scripts de reserva e
    de devolução, literais (doors 2 e 3)
 2. `.env.example` (exists) e `docs/infrastructure.md` (exists) - `REGISTRATION_MAX_PER_IP` e
    `REGISTRATION_IP_WINDOW_SECONDS` (door 4)
@@ -120,6 +120,7 @@ stateDiagram-v2
 | script de devolução | `KEYS[1]` a chave; lê o uso; só se ele for maior que 0 faz `DECR`, que mantém a expiração; retorna `0`; uma chave ausente continua ausente | `DECR` incondicional - cria a chave sem expiração e com valor negativo quando a janela expirou entre reserva e devolução |
 | variáveis | `REGISTRATION_MAX_PER_IP=20` e `REGISTRATION_IP_WINDOW_SECONDS=3600` em `.env.example`, seção `# Regras de negócio`, e na tabela de docs/infrastructure.md | valor fixo no código de cada stack - três lugares para mudar e testes que não conseguem baixar a cota |
 | decisão 17 | `| [17](#17-...) | Cota de cadastros concluídos por IP | Definida |` em docs/decisions.md, com o motivo e o custo | registrar como 15 - número já ocupado pelo golang-migrate |
+| segundos restantes da reserva (encontrado na verificação) | os dois `return` do script de reserva devolvem `math.max(1, TTL)`; `REGISTRATION_MAX_PER_IP` vale pelo menos 1 | o `TTL` cru - no último meio segundo da janela o Redis arredonda para 0, e a API mandaria `Retry-After: 0` |
 
 - Nothing else in this change is hard to reverse
 
@@ -176,7 +177,7 @@ Variáveis, cenários e a decisão acompanham o contrato.
 | Escopo sem stacks | Esta rodada muda contrato, configuração e testes dos scripts; nenhum código de stack | não há stack para mudar, e o design pede a regra no contrato primeiro | y |
 | Número da decisão | 17 | a 15 reservada no design foi usada pelo golang-migrate, e a 16 pelo container do frontend | y |
 | Janela depois de devolver tudo | quando uma devolução leva o uso a 0, a próxima reserva recomeça a janela | o `EXPIRE` só roda quando o `INCR` resulta em 1; é o mesmo que a chave nunca ter sido usada | y |
-| Prova dos scripts | `tests/infra/limiter.sh` extrai os blocos `lua` de › Operação no Redis e os executa por `EVAL` no `redis-limiter` | o documento é o que as stacks copiam; testar uma cópia provaria outra coisa | y |
+| Prova dos scripts | `tests/infra/limiter.sh` extrai os blocos `lua` de › Limite por IP › Scripts da cota (correção de localização: o plano citava › Operação no Redis, que é a seção do contador do par) e os executa por `EVAL` no `redis-limiter` | o documento é o que as stacks copiam; testar uma cópia provaria outra coisa | y |
 
 **Open questions:** none - all resolved or logged above.
 

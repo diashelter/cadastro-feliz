@@ -129,10 +129,19 @@ t_ip1_quota() {
   local body ok=0 term consumes returns
   body="$(section "$CONTRACT_DOC" 'Limite por IP$')"
   [ -n "$body" ] || { note "api-contract.md sem ## Limite por IP"; return 1; }
-  for term in 'registration:ip:{sha256(ip)}' 'REGISTRATION_MAX_PER_IP' 'REGISTRATION_IP_WINDOW_SECONDS' \
-      '20' '3600' 'IP do cliente' 'primeira reserva'; do
-    grep -qF -- "$term" <<< "$body" || { note "› Limite por IP sem '$term'"; ok=1; }
-  done
+  # Cada valor na própria linha da tabela.
+  row_has() {
+    local label="$1" row term; shift
+    row="$(grep -F "| $label |" <<< "$body" | head -1)"
+    for term in "$@"; do
+      grep -qF -- "$term" <<< "$row" || { note "linha '$label' sem '$term': $row"; return 1; }
+    done
+  }
+  row_has 'Identidade contada' 'IP do cliente' || ok=1
+  grep -F '| Identidade contada |' <<< "$body" | grep -qF 'e-mail' && { note "identidade cita e-mail"; ok=1; }
+  row_has 'Chave' '`registration:ip:{sha256(ip)}`' || ok=1
+  row_has 'Cota' '20' 'REGISTRATION_MAX_PER_IP' || ok=1
+  row_has 'Janela' 'Fixa' 'primeira reserva' '3600' 'REGISTRATION_IP_WINDOW_SECONDS' || ok=1
   consumes="$(grep -F '| O que consome a cota |' <<< "$body")"
   grep -qF '`201`' <<< "$consumes" && ! grep -qE '`(409|422|429|500)`' <<< "$consumes" \
     || { note "consumo da cota não é só o 201: $consumes"; ok=1; }
@@ -175,13 +184,14 @@ check "IP3 processing order reserves before transaction" t_ip3_order
 
 t_ip4_responses() {
   local body row
-  body="$(subsection "$CONTRACT_DOC" 'Respostas$')"
+  # › Respostas com as subseções ####, até o próximo ## ou ###.
+  body="$(awk '/^### Respostas$/{on=1; next} on && /^#{2,3} /{exit} on' "$CONTRACT_DOC")"
   row="$(grep -F '| `429 Too Many Requests` |' <<< "$body")"
   grep -qF 'par IP + e-mail' <<< "$row" && grep -qF 'cota do IP' <<< "$row" \
     || { note "linha do 429 sem as duas causas: $row"; return 1; }
-  grep -qF 'janela que recusou' "$CONTRACT_DOC" || { note "contrato sem 'janela que recusou'"; return 1; }
-  grep -qF 'mesmo corpo' <<< "$(section "$CONTRACT_DOC" 'Limite por IP$')" \
-    || { note "› Limite por IP não diz que o 429 tem o mesmo corpo"; return 1; }
+  grep -qF 'janela que recusou' <<< "$body" || { note "› Respostas sem 'janela que recusou'"; return 1; }
+  sentences <(printf '%s\n' "$body") | grep -F 'corpo' | grep -qF 'mesmo' \
+    || { note "› Respostas não diz que o 429 tem o mesmo corpo nos dois casos"; return 1; }
 }
 check "IP4 responses name both 429 causes" t_ip4_responses
 
@@ -189,7 +199,7 @@ t_ip12_limitations() {
   local body ok=0
   body="$(section "$CONTRACT_DOC" 'Limitações conhecidas$')"
   grep -qF 'Sem limite só por IP' <<< "$body" && { note "limitação 'Sem limite só por IP' ainda presente"; ok=1; }
-  grep -F 'mesmo IP' <<< "$body" | grep -F '20' | grep -qF 'cota' \
+  grep -F 'mesmo IP' <<< "$body" | grep -F '20' | grep -F 'cota' | grep -qF 'por hora' \
     || { note "limitações sem a cota dividida por quem tem o mesmo IP"; ok=1; }
   grep -iF 'devolução' <<< "$body" | grep -F 'falha' | grep -qF 'unidade' \
     || { note "limitações sem a devolução que falha"; ok=1; }
@@ -215,7 +225,7 @@ t_ip14_scenarios() {
   body="$(section "$WORK/docs/architecture.md" 'Cenários para validar a implementação$')"
   s12="$(grep -E '^12\. ' <<< "$body")"
   s13="$(grep -E '^13\. ' <<< "$body")"
-  for term in '20' '201' '429' '409'; do
+  for term in '20 e-mails' '(201)' '429 no 21º' 'sem gravar nada' '409 sem consumir cota'; do
     grep -qF "$term" <<< "$s12" || { note "cenário 12 sem '$term'"; ok=1; }
   done
   grep -qF '50' <<< "$s13" && grep -qF 'exatamente 20' <<< "$s13" && grep -qF '201' <<< "$s13" \

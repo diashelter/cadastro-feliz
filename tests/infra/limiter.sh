@@ -46,6 +46,33 @@ t_ip5_reserve_limit() {
   [ "${out[0]}" = 0 ] || { note "21ª reserva retornou ${out[0]}"; return 1; }
   [ "${out[1]}" -ge 1 ] && [ "${out[1]}" -le 3600 ] || { note "21ª reserva com TTL ${out[1]}"; return 1; }
   [ "$(redis_q GET "$KEY")" = 20 ] || { note "valor $(redis_q GET "$KEY"), esperado 20"; return 1; }
+
+  # A cota vem de ARGV[1]: com 3, aceita 3 e recusa a 4ª.
+  redis_q DEL "$KEY" >/dev/null
+  for i in 1 2 3; do
+    mapfile -t out < <(redis_q EVAL "$(cat "$SCRIPTS/1.lua")" 1 "$KEY" 3 60)
+    [ "${out[0]}" = 1 ] || { note "cota 3: reserva $i retornou ${out[0]}"; return 1; }
+  done
+  mapfile -t out < <(redis_q EVAL "$(cat "$SCRIPTS/1.lua")" 1 "$KEY" 3 60)
+  [ "${out[0]}" = 0 ] || { note "cota 3: 4ª reserva retornou ${out[0]}"; return 1; }
+  [ "$(redis_q GET "$KEY")" = 3 ] || { note "cota 3: valor $(redis_q GET "$KEY")"; return 1; }
+
+  # Janela fixa: reservas depois da primeira não renovam a expiração.
+  redis_q DEL "$KEY" >/dev/null
+  reserve >/dev/null
+  redis_q EXPIRE "$KEY" 1000 >/dev/null
+  for i in 1 2 3; do reserve >/dev/null; done
+  local ttl
+  ttl="$(redis_q TTL "$KEY")"
+  [ "$ttl" -ge 990 ] && [ "$ttl" -le 1000 ] || { note "reservas renovaram a janela: TTL $ttl"; return 1; }
+
+  # No último meio segundo o TTL do Redis é 0; os segundos retornados valem pelo menos 1.
+  redis_q SET "$KEY" 20 PX 300 >/dev/null
+  mapfile -t out < <(reserve)
+  [ "${out[0]}" = 0 ] && [ "${out[1]}" -ge 1 ] || { note "fim da janela, recusa: ${out[*]}"; return 1; }
+  redis_q SET "$KEY" 5 PX 300 >/dev/null
+  mapfile -t out < <(reserve)
+  [ "${out[0]}" = 1 ] && [ "${out[1]}" -ge 1 ] || { note "fim da janela, aceite: ${out[*]}"; return 1; }
 }
 check "IP5 reserve accepts 20 and refuses the 21st" t_ip5_reserve_limit
 
@@ -70,9 +97,13 @@ t_ip7_release() {
   redis_q DEL "$KEY" >/dev/null
   local i
   for i in $(seq 1 20); do reserve >/dev/null; done
+  # Um TTL arbitrário distingue a expiração mantida de uma renovada para 3600.
+  redis_q EXPIRE "$KEY" 1000 >/dev/null
   release >/dev/null
   [ "$(redis_q GET "$KEY")" = 19 ] || { note "valor $(redis_q GET "$KEY"), esperado 19"; return 1; }
-  ttl_in_window
+  local ttl
+  ttl="$(redis_q TTL "$KEY")"
+  [ "$ttl" -ge 990 ] && [ "$ttl" -le 1000 ] || { note "devolução mudou o TTL para $ttl"; return 1; }
 }
 check "IP7 release decrements and keeps ttl" t_ip7_release
 
@@ -119,15 +150,20 @@ t_ip10_refused_ttl() {
   [ "${out[0]}" = 0 ] || { note "reserva acima da cota retornou ${out[0]}"; return 1; }
   [ "${out[1]}" -ge 1230 ] && [ "${out[1]}" -le 1234 ] \
     || { note "TTL retornado ${out[1]}, esperado o da chave, entre 1230 e 1234"; return 1; }
-  ip_section | grep -q 'Retry-After' || { note "› Limite por IP não liga o TTL ao Retry-After"; return 1; }
+  ip_section | grep -F '**Decisão:**' | grep -F 'segundos restantes' | grep -qF 'Retry-After' \
+    || { note "a Decisão do script não usa os segundos restantes no Retry-After"; return 1; }
 }
 check "IP10 refused reserve returns key ttl" t_ip10_refused_ttl
 
 t_ip11_always_ttl() {
   [ "$limiter_ready" -eq 1 ] || return 1
   redis_q DEL "$KEY" >/dev/null
-  reserve >/dev/null; release >/dev/null; reserve >/dev/null
+  reserve >/dev/null
+  redis_q EXPIRE "$KEY" 1000 >/dev/null
+  release >/dev/null; reserve >/dev/null
   ttl_in_window || { note "depois de reserva, devolução, reserva"; return 1; }
+  # Com o uso em 0, a reserva seguinte recomeça a janela.
+  [ "$(redis_q TTL "$KEY")" -ge 3590 ] || { note "a janela não recomeçou: TTL $(redis_q TTL "$KEY")"; return 1; }
   redis_q DEL "$KEY" >/dev/null
   local i
   for i in $(seq 1 20); do reserve >/dev/null; done
