@@ -41,16 +41,22 @@ flowchart TD
     normalize --> count["Conta a tentativa no redis-limiter"]
     count --> limit{"Mais de 5 na janela?"}
     limit -->|Sim| r429["429 com Retry-After"]
-    limit -->|Não| tx["Transação: INSERT users e users_outbox"]
+    limit -->|Não| reserve["Reserva uma unidade da cota do IP"]
+    reserve --> quota{"Cota do IP esgotada?"}
+    quota -->|Sim| r429ip["429 com Retry-After da janela do IP"]
+    quota -->|Não| tx["Transação: INSERT users e users_outbox"]
     tx --> unique{"Violou UNIQUE de email?"}
-    unique -->|Sim| r409["409"]
-    unique -->|Não| r201["201"]
+    unique -->|Sim| release409["Devolve a reserva e responde 409"]
+    unique -->|Não| r201["201, reserva consumida"]
+    tx -->|Falha no banco| release500["Devolve a reserva e responde 500"]
 ```
 
 1. **Validar o corpo.** Essa etapa não usa Redis nem banco.
 2. **Normalizar o e-mail**, com `trim` e minúsculas.
 3. **Contar a tentativa** no `redis-limiter`, pelo par IP do cliente e e-mail normalizado.
-4. **Gravar** `users` e `users_outbox` na mesma transação. Não há `SELECT` prévio: a duplicidade é detectada pela constraint `UNIQUE`, o que também evita condição de corrida entre requisições simultâneas.
+4. **Reservar uma unidade da cota do IP** no `redis-limiter`, numa única operação atômica (veja [Limite por IP](#limite-por-ip)). Com a cota esgotada, responde 429 sem consultar o banco.
+5. **Gravar** `users` e `users_outbox` na mesma transação. Não há `SELECT` prévio: a duplicidade é detectada pela constraint `UNIQUE`, o que também evita condição de corrida entre requisições simultâneas.
+6. **Devolver a reserva** quando a resposta depois dela é 409 ou 500. Só o 201 consome a cota.
 
 Qualquer indisponibilidade em qualquer etapa resulta em 500.
 
@@ -61,7 +67,7 @@ Qualquer indisponibilidade em qualquer etapa resulta em 500.
 | `201 Created` | Cadastro gravado | `data` e `message` |
 | `409 Conflict` | E-mail já cadastrado | `message` e `errors` com o item `already_taken` |
 | `422 Unprocessable Entity` | JSON malformado, campos ausentes ou inválidos | `message` e `errors` com os erros de campo |
-| `429 Too Many Requests` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail na janela | `message` e `errors` vazio, com header `Retry-After` |
+| `429 Too Many Requests` | Mais de 5 tentativas do par IP + e-mail na janela, ou cota do IP esgotada (20 cadastros por hora) | `message` e `errors` vazio, com header `Retry-After` da janela que recusou |
 | `500 Internal Server Error` | Banco ou `redis-limiter` indisponível, ou erro inesperado | `message` e `errors` vazio |
 
 #### Forma do corpo de erro
@@ -151,7 +157,7 @@ Content-Type: application/json
 }
 ```
 
-`Retry-After` traz os segundos restantes até a janela expirar.
+`Retry-After` traz os segundos restantes até a janela que recusou expirar: a do par IP + e-mail ou a da cota do IP. O corpo é o mesmo nos dois casos, e a resposta não revela qual limite foi atingido.
 
 #### 500 Internal Server Error
 
@@ -233,12 +239,90 @@ Sequência com o mesmo e-mail, a partir do mesmo IP, dentro da janela:
 | 2ª a 5ª | E-mail já cadastrado | 409 | Sim |
 | 6ª em diante | Limite excedido | 429 | Não |
 
+## Limite por IP
+
+Cada IP tem uma cota de cadastros concluídos por janela. O contador por IP + e-mail barra a repetição do mesmo e-mail; a cota barra um único IP que cadastra muitos e-mails diferentes, porque cada cadastro concluído gera um e-mail para o endereço informado.
+
+| Item | Valor |
+|---|---|
+| Identidade contada | IP do cliente, na forma canônica de [IP do cliente](#ip-do-cliente) |
+| Armazenamento | `redis-limiter`, comum às três stacks |
+| Chave | `registration:ip:{sha256(ip)}`, sem nenhum prefixo de framework |
+| Cota | 20 cadastros (`REGISTRATION_MAX_PER_IP`) |
+| Janela | Fixa, 1 hora a partir da primeira reserva (`REGISTRATION_IP_WINDOW_SECONDS`, 3600) |
+| Quando reserva | Depois do contador por IP + e-mail e antes da transação. Um 429 do par não reserva |
+| O que consome a cota | Só o cadastro concluído (`201`) |
+| O que devolve a reserva | `409` e `500` respondidos depois da reserva |
+| Cota esgotada | 429 com o mesmo corpo do contador por IP + e-mail, sem consultar o banco |
+| `redis-limiter` indisponível | A API retorna 500, como no contador por IP + e-mail |
+
+A verificação e a reserva são uma única operação atômica, feita antes de abrir a transação. Consultar a cota antes e incrementar depois do commit deixaria N requisições paralelas passarem juntas: não use esse formato.
+
+### Chave da cota
+
+1. Pegue o IP na forma canônica de [IP do cliente](#ip-do-cliente), em UTF-8.
+2. Calcule o SHA-256 desse texto e escreva em hexadecimal minúsculo.
+3. Prefixe com `registration:ip:`.
+
+| Entrada | Chave |
+|---|---|
+| IP `203.0.113.10` | `registration:ip:631f08140b24b7274d12df3c37a1a80ce5876dafd7007d772e0114fddf88b682` |
+
+Esse exemplo serve de teste nas três stacks.
+
+### Scripts da cota
+
+Os dois scripts fazem parte do contrato, como o do contador por IP + e-mail. Cada stack mantém uma cópia deles, e os testes da infraestrutura executam os blocos abaixo no `redis-limiter`.
+
+**Reserva**
+
+```lua
+local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+if used >= tonumber(ARGV[1]) then
+  return { 0, math.max(1, redis.call('TTL', KEYS[1])) }
+end
+used = redis.call('INCR', KEYS[1])
+if used == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return { 1, math.max(1, redis.call('TTL', KEYS[1])) }
+```
+
+- **Entrada:** `KEYS[1]` é a chave, `ARGV[1]` é `REGISTRATION_MAX_PER_IP`, que vale pelo menos 1, e `ARGV[2]` é `REGISTRATION_IP_WINDOW_SECONDS`.
+- **Saída:** `1` e os segundos restantes da janela quando reservou; `0` e os segundos restantes quando a cota está esgotada, sem alterar nada. Os segundos restantes valem no mínimo 1: no último meio segundo da janela o `TTL` do Redis arredonda para 0, e um `Retry-After: 0` mandaria tentar de novo antes de a janela expirar.
+- **Decisão:** com `0`, a API responde 429 e usa os segundos restantes no header `Retry-After`.
+- **Janela fixa:** só a reserva que leva o uso a 1 define a expiração; as outras reservas e as devoluções não a renovam.
+
+**Devolução**
+
+```lua
+local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+if used > 0 then
+  redis.call('DECR', KEYS[1])
+end
+return 0
+```
+
+- **Entrada:** `KEYS[1]` é a chave.
+- **Efeito:** devolve uma unidade sem mudar a expiração. Se a janela expirou entre a reserva e a devolução, a chave não existe e continua não existindo; o contador nunca fica negativo.
+
+Quando as devoluções levam o uso a 0, a próxima reserva recomeça a janela, como se a chave nunca tivesse sido usada.
+
+Sequência a partir do mesmo IP, com e-mails novos, dentro da janela:
+
+| Cadastro | Resposta | Consulta o banco? |
+|---|---|---|
+| 1º ao 20º | 201 | Sim |
+| 21º em diante | 429 | Não |
+| E-mail já cadastrado, com cota livre | 409, a reserva é devolvida | Sim |
+
 ## Limitações conhecidas
 
 - **Enumeração de e-mails:** o 409 revela que um e-mail já está cadastrado.
 - **Bloqueio por quem divide o IP:** quem está atrás do mesmo IP (a mesma rede com NAT, por exemplo) ainda pode bloquear o cadastro de um e-mail alheio por até 15 minutos. Pessoas em outros IPs não são afetadas.
 - **Troca de IP contorna o limite:** cada IP novo ganha mais 5 tentativas para o mesmo e-mail.
-- **Sem limite só por IP:** muitas tentativas de um IP com e-mails diferentes não são barradas.
+- **Cota dividida por quem tem o mesmo IP:** pessoas atrás do mesmo IP (a mesma rede com NAT, por exemplo) dividem a cota de 20 cadastros por hora.
+- **Devolução que falha:** se a devolução da reserva falhar, ou a API cair entre a reserva e a resposta, a cota fica com uma unidade a mais até a janela expirar.
 - **Ponto único de falha:** se o `redis-limiter` cair, nenhuma stack aceita cadastros até ele voltar.
 - **Respostas fora do contrato:** 404, 405, `Content-Type` errado e corpo que não é objeto não têm formato definido, e cada framework responde do seu jeito.
 - **Quantidade de erros por campo:** um e-mail longo e inválido pode trazer um ou dois itens em `errors`, conforme a stack, então o texto exibido pode variar entre elas.
@@ -258,14 +342,22 @@ curl -i -X POST http://localhost:8080/users \
 
 O frontend é um formulário público com os campos nome e e-mail, em `http://localhost:3000`.
 
+O formulário não valida nada no navegador: envia nome e e-mail exatamente como foram digitados, sem `trim`, e todo erro de campo exibido vem da API (decisão 18 de [decisions.md](decisions.md)). Só uma requisição sai por vez, e os campos mantêm o que foi digitado depois de qualquer resposta.
+
 | Resultado | Mensagem exibida |
 |---|---|
-| 201 | Recebemos seus dados! Em instantes você receberá um e-mail de confirmação. |
+| 201, com qualquer corpo | Recebemos seus dados! Em instantes você receberá um e-mail de confirmação. |
 | 409 ou 422 | Texto da tabela abaixo, junto de cada campo. |
-| 429 | Muitas tentativas com este e-mail. Tente novamente em {minutos} minutos. |
+| 409 ou 422 sem nenhum item de `name` ou `email`, ou com corpo fora da forma única | Mesmo texto do 500. |
+| 429 | Muitas tentativas de cadastro. Tente novamente em {minutos} minutos. |
+| 429 sem `Retry-After` legível | Muitas tentativas de cadastro. Tente novamente mais tarde. |
 | 500 | Não foi possível concluir seu cadastro. Tente novamente em instantes. |
-| Outro status, ou corpo fora da forma do contrato | Mesmo texto do 500. |
+| Outro status | Mesmo texto do 500. |
 | Falha de rede | Serviço indisponível no momento. Tente novamente em instantes. |
+
+O 201 é sucesso sem que o corpo seja lido: o cadastro já foi gravado, e mostrar um erro levaria a pessoa a reenviar e receber um 409.
+
+Os minutos do 429 são os segundos do `Retry-After` divididos por 60 e arredondados para cima, no mínimo 1: `742` mostra 13 minutos, e de `0` a `60` mostra `1 minuto`, no singular. Um `Retry-After` legível é um inteiro decimal maior ou igual a zero; qualquer outro valor, ou a ausência do header, mostra o texto sem prazo.
 
 Cada campo mostra o texto do seu primeiro item em `errors`:
 

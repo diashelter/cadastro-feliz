@@ -149,7 +149,9 @@ Estes cenários valem para cada stack e servem de critério de aceite quando o c
 7. **Stack derrubada:** com nenhuma stack ativa, o frontend mostra a mensagem de serviço indisponível.
 8. **Fila fora do ar:** parar a fila, cadastrar (201), ver o evento em `pending` e religar a fila para o e-mail chegar.
 9. **Limite entre stacks:** atingir o 429 em uma stack, trocar de stack e continuar recebendo 429 com o mesmo e-mail e o mesmo IP.
-11. **Limite por IP e e-mail:** atingir o 429 com um e-mail a partir de um IP e cadastrar o mesmo e-mail a partir de outro IP, sem receber 429.
 10. **Contador fora do ar:** parar o `redis-limiter`, cadastrar e obter 500, sem gravar nada no banco.
+11. **Limite por IP e e-mail:** atingir o 429 com um e-mail a partir de um IP e cadastrar o mesmo e-mail a partir de outro IP, sem receber 429.
+12. **Cota por IP:** cadastrar 20 e-mails diferentes a partir do mesmo IP (201), receber 429 no 21º sem gravar nada, e confirmar que e-mails já cadastrados, a partir do mesmo IP, recebem 409 sem consumir cota.
+13. **Cota com requisições paralelas:** enviar 50 cadastros paralelos com e-mails novos, a partir do mesmo IP e com a cota vazia, e obter exatamente 20 respostas 201 e 30 respostas 429, com 20 linhas em `users_outbox`.
 
 Em Laravel, o relay roda em um container separado do worker, então o evento do cenário 6 fica em `published`. Em NestJS e Go, o relay está no próprio worker, e o evento fica em `pending`.

@@ -2,7 +2,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O frontend ainda é um esqueleto, sem o formulário. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -67,12 +67,12 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 | `201` | Cadastro gravado, com usuário e evento na mesma transação |
 | `409` | E-mail já cadastrado |
 | `422` | Dados inválidos, incluindo e-mail com formato inválido |
-| `429` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail em 15 minutos; responde sem consultar o banco |
+| `429` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail em 15 minutos, ou mais de 20 cadastros por IP em uma hora; responde sem consultar o banco |
 | `500` | Indisponibilidade da API |
 
 ## Como vai funcionar
 
-> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o esqueleto do frontend responde em <http://localhost:3000>.
+> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
 
 O único pré-requisito é Docker com Docker Compose, além do `make`.
 
@@ -142,6 +142,12 @@ Acrescentar uma dependência ao frontend, sem Node na máquina:
 make frontend-npm ARGS="install <pacote>"
 ```
 
+Checar os tipos e rodar os testes do frontend, sem Node na máquina:
+
+```bash
+make test-frontend
+```
+
 Limpar os contadores de tentativas, para repetir testes do `429`:
 
 ```bash
@@ -169,7 +175,7 @@ cadastro-feliz/
 ├── database/migrations/      # schema canônico em SQL
 ├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
-├── frontend/                 # Next.js em next dev (esqueleto)
+├── frontend/                 # Next.js em next dev, com o formulário
 └── apis/                     # planejado
     ├── laravel/
     ├── nestjs/
@@ -192,6 +198,7 @@ cadastro-feliz/
 - **E-mails duplicados:** a entrega é *at-least-once*, então uma queda no momento errado pode enviar o e-mail duas vezes.
 - **Enumeração de e-mails:** o `409` revela que um e-mail já está cadastrado.
 - **Bloqueio por quem divide o IP:** o limite conta o par IP e e-mail, então só quem está atrás do mesmo IP pode bloquear o cadastro de um e-mail alheio, por até 15 minutos.
+- **Cota dividida por quem tem o mesmo IP:** pessoas atrás do mesmo IP dividem a cota de 20 cadastros por hora.
 - **Ponto único de falha:** se o `redis-limiter` cair, nenhuma stack aceita cadastros até ele voltar.
 
 Este projeto é uma POC de estudo e não está preparado para produção.

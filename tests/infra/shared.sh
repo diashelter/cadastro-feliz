@@ -8,7 +8,7 @@ t_c9_env_example() {
     | sed -nE 's/^\| `([A-Z_]+)` \| `([^`]*)` \|.*/\1=\2/p')"
   local count
   count="$(printf '%s\n' "$expected" | grep -c .)"
-  [ "$count" -eq 22 ] || { note "docs listam $count variáveis, esperado 22"; return 1; }
+  [ "$count" -eq 24 ] || { note "docs listam $count variáveis, esperado 24"; return 1; }
   local line ok=0
   while IFS= read -r line; do
     grep -qxF "$line" "$example" || { note "falta em .env.example: $line"; ok=1; }

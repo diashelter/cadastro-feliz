@@ -80,6 +80,7 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make migrate` | Aplica as migrations pendentes; sobe `postgres`, `redis-limiter` e `mailpit` antes, se necessário, sem construir o `frontend` |
 | `make watch-frontend` | Reconstrói e sobe o `frontend` e fica em primeiro plano copiando cada edição de `frontend/src` para o container. Uma mudança em `package.json`, `package-lock.json` ou `next.config.ts` reconstrói a imagem. Ctrl+C encerra só a sincronização |
 | `make frontend-npm ARGS="<comando npm>"` | Roda o npm do frontend em um container descartável, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `frontend/` |
+| `make test-frontend` | Reconstrói a imagem do `frontend` com o código atual e, num container descartável, checa os tipos e roda os testes do Vitest. Não recria nem para o `frontend` em execução, e remove a rede quando foi ele que a criou |
 | `make up-laravel` | Sobe a stack Laravel |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |
@@ -91,7 +92,7 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make logs-laravel`, `make logs-nest`, `make logs-go` | Acompanha os logs da stack |
 | `make logs-shared` | Acompanha os logs dos serviços compartilhados |
 | `make reset-limits` | Limpa os contadores de tentativas no `redis-limiter` |
-| `make test-infra` | Testa a infraestrutura contra o Docker local. Destrói o ambiente `cadastro-feliz-*`, então recusa rodar se ele já existir |
+| `make test-infra` | Testa a infraestrutura contra o Docker local. Destrói o ambiente `cadastro-feliz-*`, então recusa rodar se ele já existir. Para rodar só alguns arquivos de `tests/infra`, use `bash tests/infra/run.sh docs limiter` |
 
 Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `laravel` usa `apis/laravel` e o projeto `cadastro-feliz-laravel`, `nest` usa `apis/nestjs` e `cadastro-feliz-nest`, `go` usa `apis/golang` e `cadastro-feliz-go`. Um alvo de stack sem compose recusa com `stack <nome> ainda não implementada`, e um nome fora dessa lista recusa com `stack <nome> desconhecida`, nos dois casos antes de alterar qualquer coisa. Para acrescentar uma stack, basta criar o compose dela, com `name: cadastro-feliz-<nome>` e a rede `cadastro-feliz-net` declarada como externa.
 
@@ -171,6 +172,8 @@ Os valores abaixo são padrões para uso local, sem nenhum segredo real. Cada fr
 |---|---|---|
 | `REGISTRATION_MAX_ATTEMPTS` | `5` | Tentativas por e-mail na janela |
 | `REGISTRATION_ATTEMPT_WINDOW_SECONDS` | `900` | Duração da janela (15 minutos) |
+| `REGISTRATION_MAX_PER_IP` | `20` | Cadastros concluídos por IP na janela da cota |
+| `REGISTRATION_IP_WINDOW_SECONDS` | `3600` | Duração da janela da cota por IP (1 hora) |
 | `OUTBOX_BATCH_SIZE` | `100` | Eventos por execução do relay |
 | `OUTBOX_REPUBLISH_AFTER_SECONDS` | `300` | Tempo em `published` antes de republicar |
 | `OUTBOX_MAX_ATTEMPTS` | `5` | Falhas de envio antes de `failed` |

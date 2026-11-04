@@ -56,6 +56,78 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: C18 tests/infra/frontend.sh t_fe18_npm_exact (infra)
 - last seen: 2026-11-04T18:38:24Z
 
+### L-008 - A claim that a TTL is kept, not renewed, is proven by setting an arbitrary TTL first; a range up to the full window also accepts a renewed one.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: C7 tests/infra/limiter.sh t_ip7_release (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-009 - A script that takes its limit as an argument must be run with a second limit, or a hard-coded limit passes.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: C5 tests/infra/limiter.sh t_ip5_reserve_limit (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-010 - A doc claim that ties a value to a row is proven on that row, not by grepping the whole section where the value also appears elsewhere.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: C1 tests/infra/docs.sh t_ip1_quota (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-011 - A doc check for a scenario asserts its outcome phrases, not just the numbers it mentions.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: C14 tests/infra/docs.sh t_ip14_scenarios (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-012 - A doc check scoped to a section must read that section with its subsections, not a neighbouring one that happens to hold the phrase.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: C4 tests/infra/docs.sh t_ip4_responses (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-013 - Redis TTL rounds to 0 in a key's last half second; a value meant for Retry-After needs a floor of 1.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-ip-limit
+- evidence: AC 5, AC 10 docs/api-contract.md Scripts da cota (infra)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-014 - When a plan names the section a test reads from, name the section the doc will actually create.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `docs` · harmful: 0
+- features: registration-ip-limit
+- evidence: plan.md Shape step 1 (docs)
+- last seen: 2026-11-04T19:44:43Z
+
+### L-015 - A lookup keyed by text from an API must check own keys only; __proto__ or constructor otherwise resolve through the prototype.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `frontend` · harmful: 0
+- features: registration-form
+- evidence: C8 registrationService.ts (frontend)
+- last seen: 2026-11-04T20:09:40Z
+
+### L-016 - A shape check is proven per member, and an invalid member must sit beside a valid one, or the outcome hides which check fired.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `frontend` · harmful: 0
+- features: registration-form
+- evidence: C9 RegistrationForm.test.tsx (frontend)
+- last seen: 2026-11-04T20:09:40Z
+
+### L-017 - Arithmetic on an unbounded numeric header needs an example far past Number's safe range.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `frontend` · harmful: 0
+- features: registration-form
+- evidence: C10 registrationService.ts (frontend)
+- last seen: 2026-11-04T20:09:40Z
+
+### L-018 - An exact-version claim is proven by matching the exact form, not by rejecting two range prefixes.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-form
+- evidence: C23 tests/infra/test-frontend.sh t_rf23_exact (infra)
+- last seen: 2026-11-04T20:09:40Z
+
+### L-019 - A grep for a singular word must exclude neighbouring digits and the plural suffix.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: registration-form
+- evidence: C25 tests/infra/docs.sh t_rf25_contract (infra)
+- last seen: 2026-11-04T20:09:40Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
