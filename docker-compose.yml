@@ -1,0 +1,81 @@
+# Serviços comuns às três stacks. Referência: docs/infrastructure.md.
+# Use o Makefile: ele cria a rede externa e ordena este projeto, o migrate e a stack.
+name: cadastro-feliz-shared
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      # A partir do PostgreSQL 18 a imagem declara o volume em /var/lib/postgresql.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # Pelo TCP: durante a inicialização o servidor temporário só escuta no socket.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+
+  redis-limiter:
+    image: redis:8.10.3-alpine
+    # Só guarda o contador de tentativas: descartável, sem persistência.
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --maxmemory-policy
+      - volatile-ttl
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+      start_interval: 1s
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    ports:
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+      start_interval: 1s
+
+  migrate:
+    image: migrate/migrate:v4.20.1
+    # Execução única, por `make migrate`: fora do `up` dos serviços de longa duração.
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./database/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}?sslmode=disable
+      - up
+
+volumes:
+  postgres-data:
+
+networks:
+  default:
+    name: cadastro-feliz-net
+    external: true
