@@ -2,7 +2,7 @@
 
 > **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). Os composes das stacks ainda não foram criados.
 
-Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose, além do `make`.
+Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
 ## Organização dos containers
 
@@ -136,7 +136,7 @@ O `frontend` roda `next dev` na porta 3000, como o usuário `node`. Não há bui
 
 ## Integração contínua
 
-O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request, a cada push na `main` e sob demanda, pela aba *Actions*. Ele chama os mesmos comandos usados na máquina, sobre o Docker do runner `ubuntu-24.04`, sem instalar Node nem nenhuma outra ferramenta.
+O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request, a cada push na `main` e sob demanda, pela aba *Actions*. Ele chama os mesmos comandos usados na máquina, sobre o Docker do runner `ubuntu-24.04`, sem instalar Node. O Compose do runner é anterior ao 2.39, então cada job instala antes o Compose fixado em `COMPOSE_VERSION`, conferido pelo checksum publicado em `COMPOSE_SHA256`.
 
 | Job | O que roda |
 |---|---|

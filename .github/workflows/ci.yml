@@ -18,6 +18,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# O runner traz um Compose anterior ao 2.39, que recusa `build.provenance` do
+# docker-compose.yml. Instala uma versão fixada, conferida pelo checksum publicado.
+env:
+  COMPOSE_VERSION: v2.40.3
+  COMPOSE_SHA256: dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
+
 jobs:
   frontend:
     name: Frontend (tipos e testes)
@@ -26,8 +32,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Versões do Docker
-        run: docker version --format '{{.Server.Version}}' && docker compose version
+      - name: Instala o Docker Compose
+        run: |
+          dir="$HOME/.docker/cli-plugins"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -
+          chmod +x "$dir/docker-compose"
+          docker version --format '{{.Server.Version}}'
+          docker compose version
 
       - name: make test-frontend
         run: make test-frontend
@@ -57,8 +71,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Versões do Docker
-        run: docker version --format '{{.Server.Version}}' && docker compose version
+      - name: Instala o Docker Compose
+        run: |
+          dir="$HOME/.docker/cli-plugins"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -
+          chmod +x "$dir/docker-compose"
+          docker version --format '{{.Server.Version}}'
+          docker compose version
 
       - name: tests/infra/run.sh ${{ matrix.suite }}
         run: bash tests/infra/run.sh "${{ matrix.suite }}"

@@ -76,7 +76,7 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 
 > Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
 
-O único pré-requisito é Docker com Docker Compose, além do `make`.
+O único pré-requisito é Docker com Docker Compose 2.39 ou mais recente, além do `make`.
 
 Subir os serviços compartilhados, o frontend incluído, e aplicar o schema. `make up-<stack>` não sobe o frontend, então rode `make up-shared` antes:
 
