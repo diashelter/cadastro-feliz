@@ -1,5 +1,5 @@
-# Container do frontend (.specs/features/frontend-container). Carregado por run.sh
-# depois de stack.sh, cujo fake_stack é usado em FE22 e FE23.
+# Container do frontend (.specs/features/frontend-container). Carregado por run.sh,
+# que define o fake_stack usado em FE22 e FE23.
 
 FE=cadastro-feliz-shared-frontend-1
 FE_IMAGE=cadastro-feliz-shared-frontend
@@ -17,7 +17,8 @@ wait_for() {
   "$@"
 }
 
-page_has() { page "$1" | grep -qF "$2"; }
+# Sem pipe para o grep -q: com pipefail, o curl sem leitor (SIGPIPE) faria falhar.
+page_has() { local body; body="$(page "$1")"; grep -qF -- "$2" <<< "$body"; }
 status_is() { [ "$(status_of "$1")" = "$2" ]; }
 fe_healthy() { [ "$(health "$FE")" = healthy ]; }
 four_healthy() { shared_healthy && fe_healthy; }

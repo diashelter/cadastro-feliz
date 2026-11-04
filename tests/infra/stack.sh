@@ -1,36 +1,5 @@
 # S3 - Troca de stack pelo Makefile. Carregado por run.sh.
 
-# Compose de uma stack falsa. O container só fica healthy depois de ler a tabela
-# users, então ele só sobe saudável se os comuns e o migrate rodaram antes.
-fake_stack() {
-  local name="$1" dir="$2"
-  mkdir -p "$WORK/$dir"
-  cat > "$WORK/$dir/docker-compose.yml" <<YAML
-name: cadastro-feliz-$name
-
-services:
-  api:
-    image: postgres:18.6-alpine
-    entrypoint:
-      - sh
-      - -c
-      - psql "postgresql://cadastro_feliz:cadastro_feliz@postgres:5432/cadastro_feliz" -tAc 'select count(*) from users' && touch /tmp/ready && exec sleep infinity
-    healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/ready"]
-      interval: 1s
-      retries: 30
-    volumes:
-      - queue-data:/queue
-
-volumes:
-  queue-data:
-
-networks:
-  default:
-    name: cadastro-feliz-net
-    external: true
-YAML
-}
 
 t_c16_missing_stack() {
   local target stack out rc ok=0

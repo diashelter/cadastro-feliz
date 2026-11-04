@@ -37,8 +37,12 @@ t_rf23_exact() {
 }
 check "RF23 test dependencies are exact" t_rf23_exact
 
+# A saída vai para uma variável: com pipefail, um `grep -q` que sai cedo deixa o
+# make sem leitor (SIGPIPE) e faz a linha falhar mesmo com o texto presente.
 t_rf24_help() {
-  mk help | grep -qF 'make test-frontend' || { note "make help sem make test-frontend"; return 1; }
+  local out
+  out="$(mk help)"
+  grep -qF 'make test-frontend' <<< "$out" || { note "make help sem make test-frontend"; return 1; }
 }
 check "RF24 help lists test-frontend" t_rf24_help
 
