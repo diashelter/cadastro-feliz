@@ -1,6 +1,6 @@
 # Container do frontend
 
-**Approved**: pending
+**Approved**: 2026-11-04 - user: "aprovado, pode seguir com as sugestões"
 
 ## Problem
 
@@ -193,21 +193,21 @@ A documentação descreve o container que existe e registra a forma escolhida.
 
 | Assumption | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Versão do Node | `node:26.13.0-alpine` | Node 26 é a LTS (Lithium) mais recente desde 2026-10-28, e 26.13.0 é o patch atual; Alpine como os outros serviços | n |
-| Versões do Next.js e do React | `next` `16.4.5`, `react` e `react-dom` `19.3.1` | as mais recentes no registro do npm em 2026-11-04; o Next.js 16.4.5 aceita React `^19.0.0` e Node `>=20.9.0` | n |
-| TypeScript e tipos | as versões exatas que `create-next-app@16.4.5` escolher, sem ESLint | o esqueleto segue o gerador da mesma versão do Next.js; o lint fica para o formulário (design, Out) | n |
-| O que é saudável | o servidor responde HTTP em 3000, com qualquer status | default 1 do slice frontend do design: um erro de compilação aparece no navegador e não derruba `make up-shared` | n |
-| Gerenciador de pacotes | npm | default 2 do slice frontend do design | n |
-| Cache `.next` | dentro do container, sem volume | default 3 do slice frontend do design | n |
-| `make up-<stack>` e o frontend | não sobe o frontend; o README manda rodar `make up-shared` antes | default 1 do slice Makefile do design | n |
-| Nomes dos alvos | `watch-frontend` e `frontend-npm` | default 2 do slice Makefile do design | n |
-| Rede nos testes | os testes que sobem o `frontend` precisam do registro do npm | default 3 do slice Makefile do design | n |
-| Alcance do watch | `sync` só de `frontend/src`; `rebuild` em `package.json`, `package-lock.json` e `next.config.ts`; outros arquivos de `frontend/` entram no container com `make up-shared` | é onde a rodada do formulário escreve (`src/app`, `src/modules`); o resto muda raramente | n |
-| Conteúdo do esqueleto | título `Cadastro Feliz` e a linha `API: <NEXT_PUBLIC_API_URL>`, com `lang="pt-BR"` | o design pede o nome do projeto e o endereço da API, para provar que a variável chegou à página | n |
-| Usuário do `frontend-npm` | o uid e gid de quem roda o `make`, com o cache do npm em `/tmp` | no Linux, o usuário `node` (uid 1000) não teria escrita em `frontend/` de outro dono, e root deixaria os arquivos com dono root | n |
-| Versões exatas em instalações novas | `frontend/.npmrc` com `save-exact=true` | Key decision 7 do design pede versões exatas, e `frontend-npm` é o único caminho para instalar | n |
-| Limite de tempo nos testes do watch | 10 s para uma edição e 120 s para um rebuild | o Docker local dos testes não é o Mac do responsável; o limite prova que a sincronização acontece sem reiniciar, não o tempo do Mac | n |
-| Número e origem da decisão | `16`, origem `Definida` | 15 é a última em `docs/decisions.md`; o responsável escolheu o modo e o Compose Watch na sessão de design | n |
+| Versão do Node | `node:26.13.0-alpine` | Node 26 é a LTS (Lithium) mais recente desde 2026-10-28, e 26.13.0 é o patch atual; Alpine como os outros serviços | y |
+| Versões do Next.js e do React | `next` `16.4.5`, `react` e `react-dom` `19.3.1` | as mais recentes no registro do npm em 2026-11-04; o Next.js 16.4.5 aceita React `^19.0.0` e Node `>=20.9.0` | y |
+| TypeScript e tipos | as versões exatas que `create-next-app@16.4.5` escolher, sem ESLint | o esqueleto segue o gerador da mesma versão do Next.js; o lint fica para o formulário (design, Out) | y |
+| O que é saudável | o servidor responde HTTP em 3000, com qualquer status | default 1 do slice frontend do design: um erro de compilação aparece no navegador e não derruba `make up-shared` | y |
+| Gerenciador de pacotes | npm | default 2 do slice frontend do design | y |
+| Cache `.next` | dentro do container, sem volume | default 3 do slice frontend do design | y |
+| `make up-<stack>` e o frontend | não sobe o frontend; o README manda rodar `make up-shared` antes | default 1 do slice Makefile do design | y |
+| Nomes dos alvos | `watch-frontend` e `frontend-npm` | default 2 do slice Makefile do design | y |
+| Rede nos testes | os testes que sobem o `frontend` precisam do registro do npm | default 3 do slice Makefile do design | y |
+| Alcance do watch | `sync` só de `frontend/src`; `rebuild` em `package.json`, `package-lock.json` e `next.config.ts`; outros arquivos de `frontend/` entram no container com `make up-shared` | é onde a rodada do formulário escreve (`src/app`, `src/modules`); o resto muda raramente | y |
+| Conteúdo do esqueleto | título `Cadastro Feliz` e a linha `API: <NEXT_PUBLIC_API_URL>`, com `lang="pt-BR"` | o design pede o nome do projeto e o endereço da API, para provar que a variável chegou à página | y |
+| Usuário do `frontend-npm` | o uid e gid de quem roda o `make`, com o cache do npm em `/tmp` | no Linux, o usuário `node` (uid 1000) não teria escrita em `frontend/` de outro dono, e root deixaria os arquivos com dono root | y |
+| Versões exatas em instalações novas | `frontend/.npmrc` com `save-exact=true` | Key decision 7 do design pede versões exatas, e `frontend-npm` é o único caminho para instalar | y |
+| Limite de tempo nos testes do watch | 10 s para uma edição e 120 s para um rebuild | o Docker local dos testes não é o Mac do responsável; o limite prova que a sincronização acontece sem reiniciar, não o tempo do Mac | y |
+| Número e origem da decisão | `16`, origem `Definida` | 15 é a última em `docs/decisions.md`; o responsável escolheu o modo e o Compose Watch na sessão de design | y |
 
 **Open questions:** none - all resolved or logged above.
 
