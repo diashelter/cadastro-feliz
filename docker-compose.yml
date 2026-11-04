@@ -62,7 +62,11 @@ services:
     # `next dev` com o código copiado na imagem. Referência: .design/frontend-container.md.
     # Sem bind mount: no Docker Desktop do macOS os eventos de arquivo não chegam com
     # confiança ao Turbopack. `make watch-frontend` sincroniza as edições.
-    build: ./frontend
+    build:
+      context: ./frontend
+      # Sem a atestação de proveniência, que leva a data do build: um build sem
+      # mudanças gera a mesma imagem, e o container não é recriado à toa.
+      provenance: false
     image: cadastro-feliz-shared-frontend
     environment:
       # Lido quando o container inicia; trocar o valor no .env não exige rebuild.

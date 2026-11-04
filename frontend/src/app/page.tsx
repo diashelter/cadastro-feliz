@@ -1,3 +1,9 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Cadastro Feliz",
+};
+
 export default function Home() {
   return (
     <main>
