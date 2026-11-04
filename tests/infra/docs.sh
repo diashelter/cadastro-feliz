@@ -86,8 +86,9 @@ t_fe26_readme() {
   hits="$(sentences "$f" | grep -iF 'frontend' | grep -F 'em design')"
   [ -z "$hits" ] || { note "README diz que o frontend está em design: $hits"; ok=1; }
   body="$(section "$f" 'Como vai funcionar$')"
-  shared_line="$(grep -nF 'make up-shared' <<< "$body" | head -1 | cut -d: -f1)"
-  stack_line="$(grep -nE 'make up-(laravel|nest|go)' <<< "$body" | head -1 | cut -d: -f1)"
+  # Só as linhas de comando, não a prosa que cita os alvos.
+  shared_line="$(grep -nx 'make up-shared' <<< "$body" | head -1 | cut -d: -f1)"
+  stack_line="$(grep -nxE 'make up-(laravel|nest|go)' <<< "$body" | head -1 | cut -d: -f1)"
   [ -n "$shared_line" ] && [ -n "$stack_line" ] && [ "$shared_line" -lt "$stack_line" ] \
     || { note "make up-shared não vem antes da primeira stack"; ok=1; }
   for term in 'make watch-frontend' 'make frontend-npm'; do

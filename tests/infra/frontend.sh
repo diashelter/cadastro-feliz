@@ -240,17 +240,42 @@ t_fe19_npm_without_args() {
 }
 check "FE19 frontend-npm refuses without args" t_fe19_npm_without_args
 
+# Dependências de package.json, só o bloco "dependencies".
+deps_block() { awk '/"dependencies": \{/{on=1; next} on && /\}/{exit} on' "$1"; }
+owner_uid() { ls -n "$1" | awk '{print $3}'; }
+
 t_fe18_npm_exact() {
-  local f="$WORK/frontend/package.json" lock="$WORK/frontend/package-lock.json" odd
-  mkq frontend-npm ARGS="install is-number@7.0.0" || { note "install is-number saiu com erro"; return 1; }
-  grep -qF '"is-number": "7.0.0"' "$f" || { note "package.json sem is-number 7.0.0"; return 1; }
+  local f="$WORK/frontend/package.json" lock="$WORK/frontend/package-lock.json" odd uid ok=0
+  # Como root, o dono dos arquivos não diria nada: o make roda como outro uid,
+  # com acesso ao socket do Docker, sobre uma cópia que pertence a ele.
+  uid="$(id -u)"
+  if [ "$uid" -eq 0 ]; then
+    uid=4321
+    mkdir -p "$WORK/.home"
+    chown -R "$uid:$uid" "$WORK"
+    caller() {
+      setpriv --reuid="$uid" --regid="$uid" --groups="$(stat -c %g /var/run/docker.sock)" \
+        env HOME="$WORK/.home" make --no-print-directory -C "$WORK" "$@" >/dev/null 2>&1
+    }
+  else
+    caller() { mkq "$@"; }
+  fi
+  # O npm roda com o uid de quem chama o make.
+  caller frontend-npm ARGS="exec -c 'id -u > /app/npm-uid'" || { note "npm exec saiu com erro"; return 1; }
+  [ "$(cat "$WORK/frontend/npm-uid" 2>/dev/null)" = "$uid" ] \
+    || { note "npm rodou com uid $(cat "$WORK/frontend/npm-uid" 2>/dev/null), esperado $uid"; ok=1; }
+  rm -f "$WORK/frontend/npm-uid"
+  caller frontend-npm ARGS="install is-number@7.0.0" || { note "install is-number saiu com erro"; return 1; }
+  deps_block "$f" | grep -qF '"is-number": "7.0.0"' || { note "dependencies sem is-number 7.0.0"; ok=1; }
   grep -A3 -F '"node_modules/is-number": {' "$lock" | grep -qF '"version": "7.0.0"' \
-    || { note "lock sem node_modules/is-number 7.0.0"; return 1; }
-  mkq frontend-npm ARGS="install is-odd" || { note "install is-odd saiu com erro"; return 1; }
-  odd="$(grep -F '"is-odd":' "$f")"
-  grep -qE '"is-odd": "[0-9]' <<< "$odd" || { note "is-odd gravado como: $odd"; return 1; }
-  [ ! -e "$WORK/frontend/node_modules" ] || { note "frontend/node_modules existe"; return 1; }
-  [ -O "$f" ] || { note "package.json não pertence a $(id -u)"; return 1; }
+    || { note "lock sem node_modules/is-number 7.0.0"; ok=1; }
+  caller frontend-npm ARGS="install is-odd" || { note "install is-odd saiu com erro"; return 1; }
+  odd="$(deps_block "$f" | grep -F '"is-odd":')"
+  grep -qE '"is-odd": "[0-9]' <<< "$odd" || { note "is-odd em dependencies: $odd"; ok=1; }
+  [ ! -e "$WORK/frontend/node_modules" ] || { note "frontend/node_modules existe"; ok=1; }
+  [ "$(owner_uid "$f")" = "$uid" ] || { note "dono de package.json: $(owner_uid "$f"), esperado $uid"; ok=1; }
+  [ "$(owner_uid "$lock")" = "$uid" ] || { note "dono de package-lock.json: $(owner_uid "$lock"), esperado $uid"; ok=1; }
+  return $ok
 }
 check "FE18 frontend-npm writes exact versions only" t_fe18_npm_exact
 
