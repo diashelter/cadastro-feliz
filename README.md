@@ -2,7 +2,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em design.** Este repositório contém apenas documentação. O código, o `Makefile` e os arquivos Docker ainda não existem, então os comandos abaixo mostram como o projeto vai funcionar, mas ainda não rodam.
+> **Status: em construção.** Os serviços compartilhados (`postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O frontend e as três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -72,9 +72,19 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 
 ## Como vai funcionar
 
-> Estes comandos dependem da implementação. Ainda não há `Makefile` neste repositório.
+> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado.
 
-O único pré-requisito será Docker com Docker Compose, além do `make`.
+O único pré-requisito é Docker com Docker Compose, além do `make`.
+
+Subir só os serviços compartilhados e aplicar o schema:
+
+```bash
+make up-shared
+```
+
+```bash
+make migrate
+```
 
 Subir uma stack, que derruba antes qualquer outra ativa:
 
@@ -136,15 +146,16 @@ make reset-limits
 | Painel do Horizon | <http://localhost:8080/horizon> | Só na stack Laravel |
 | Painel do RabbitMQ | <http://localhost:15672> | Só na stack Go |
 
-## Estrutura planejada
+## Estrutura do repositório
 
 ```txt
 cadastro-feliz/
 ├── README.md
-├── Makefile                  # planejado
-├── .env.example              # planejado
-├── docker-compose.yml        # planejado: serviços compartilhados
-├── database/migrations/      # planejado: schema canônico em SQL
+├── Makefile
+├── .env.example
+├── docker-compose.yml        # serviços compartilhados
+├── database/migrations/      # schema canônico em SQL
+├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
 ├── frontend/                 # planejado: Next.js
 └── apis/                     # planejado

@@ -1,6 +1,6 @@
 # Banco de dados
 
-> **Status:** em design. O SQL abaixo é a referência para as futuras migrations. Nenhuma migration foi criada ainda.
+> **Status:** em construção. O schema abaixo é aplicado pela migration `0001_create_users_and_users_outbox`. As consultas ainda serão implementadas pelas stacks.
 
 ## Visão geral
 
@@ -8,7 +8,17 @@ As três APIs usam **um único banco e um único schema** em um só container Po
 
 ## Migrations
 
-As migrations são **SQL puro** em `database/migrations`, e são a única fonte do schema. Um container `migrate`, de execução única, as aplica antes de qualquer stack subir.
+As migrations são **SQL puro** em `database/migrations`, e são a única fonte do schema. Um container `migrate`, de execução única, as aplica com o [golang-migrate](https://github.com/golang-migrate/migrate) antes de qualquer stack subir (`make migrate`, ou dentro de `make up-<stack>`).
+
+- **Formato:** pares `NNNN_<nome>.up.sql` e `NNNN_<nome>.down.sql`, com numeração de quatro dígitos.
+- **Controle:** a tabela `schema_migrations` pertence à ferramenta. Nenhuma stack lê nem escreve nela.
+- **Atomicidade:** o golang-migrate não envolve o arquivo em uma transação, então cada arquivo começa com `BEGIN;` e termina com `COMMIT;`.
+
+Se uma migration falha, a transação do arquivo é desfeita, mas a versão fica marcada como *dirty* e o migrate se recusa a continuar. Depois de corrigir o arquivo, volte a versão para a última aplicada com sucesso e rode `make migrate` de novo:
+
+```bash
+docker compose --profile tools run --rm migrate -path=/migrations -database="postgres://cadastro_feliz:cadastro_feliz@postgres:5432/cadastro_feliz?sslmode=disable" force 1
+```
 
 Nenhuma stack gerencia o schema:
 

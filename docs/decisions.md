@@ -20,6 +20,7 @@
 | [12](#12-navegador-chama-a-api-diretamente) | Navegador chama a API diretamente | Proposta |
 | [13](#13-escopo-das-convenções-do-agentsmd) | Escopo das convenções do `AGENTS.md` | Proposta |
 | [14](#14-forma-única-das-respostas-de-erro) | Forma única das respostas de erro | Definida |
+| [15](#15-golang-migrate-como-ferramenta-de-migrations) | golang-migrate como ferramenta de migrations | Proposta |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -133,3 +134,15 @@ Todo erro de `POST /users` traz `message` e uma lista `errors`, com `field`, `co
 - Nenhuma stack aproveita o formato de erro nativo do framework.
 - Os códigos e o par `field` + `code` passam a ser um contrato entre as stacks e o frontend.
 - 404, 405, `Content-Type` errado, corpo que não é objeto e a quantidade de erros por campo ficam sem definição, conforme as [limitações do contrato](api-contract.md#limitações-conhecidas).
+
+## 15. golang-migrate como ferramenta de migrations
+
+O container `migrate` usa o golang-migrate (`migrate/migrate:v4.20.1`) para aplicar `database/migrations`. Os arquivos são pares `NNNN_<nome>.up.sql` e `NNNN_<nome>.down.sql`, e o controle de versão fica na tabela `schema_migrations` do schema único. A ferramenta roda SQL puro e não pertence a nenhuma das três stacks, o que mantém a decisão 2.
+
+**Regra:** cada arquivo é atômico por conta própria, começando com `BEGIN;` e terminando com `COMMIT;`, porque o golang-migrate não envolve o arquivo em uma transação. Sem isso, uma falha no meio deixaria o schema parcial.
+
+**Aviso:** mesmo com a transação, uma migration com falha deixa a versão *dirty*. O schema volta ao estado anterior, mas o migrate se recusa a continuar até um `force` manual para a última versão aplicada, descrito em [database.md](database.md#migrations).
+
+**Alternativa descartada:** um script com `psql -f` sobre todos os arquivos não sabe o que já foi aplicado e falha na segunda execução.
+
+**Custo:** trocar de ferramenta depois exige migrar o controle de versão, porque `schema_migrations` fica no banco que as três stacks compartilham.
