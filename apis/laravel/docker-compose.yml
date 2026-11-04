@@ -1,0 +1,96 @@
+# Stack Laravel. Referência: docs/stacks.md › Laravel e .design/laravel-api-base.md.
+# Use o Makefile: ele sobe os serviços comuns e aplica o migrate antes desta stack.
+name: cadastro-feliz-laravel
+
+x-php-build: &php-build
+  context: .
+  dockerfile: docker/php/Dockerfile
+  # Sem a atestação de proveniência, que leva a data do build: um build sem
+  # mudanças gera a mesma imagem, e o container não é recriado à toa.
+  provenance: false
+
+services:
+  php-fpm:
+    build:
+      <<: *php-build
+      target: app
+    image: cadastro-feliz-laravel-php-fpm
+    environment:
+      APP_KEY: ${APP_KEY}
+      APP_ENV: ${APP_ENV}
+      APP_DEBUG: ${APP_DEBUG}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      LIMITER_REDIS_HOST: ${LIMITER_REDIS_HOST}
+      LIMITER_REDIS_PORT: ${LIMITER_REDIS_PORT}
+    healthcheck:
+      # Só a página de ping do FPM: ordena a subida do nginx, que prova o caminho inteiro.
+      test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /var/www/html/app
+        - action: sync
+          path: ./bootstrap
+          target: /var/www/html/bootstrap
+          ignore:
+            - cache/
+        - action: sync
+          path: ./config
+          target: /var/www/html/config
+        - action: sync
+          path: ./routes
+          target: /var/www/html/routes
+        - action: sync
+          path: ./tests
+          target: /var/www/html/tests
+        - action: rebuild
+          path: ./composer.json
+        - action: rebuild
+          path: ./composer.lock
+        - action: rebuild
+          path: ./docker/php
+
+  nginx:
+    image: nginx:1.30.6-alpine
+    ports:
+      - "${API_PORT}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+    healthcheck:
+      # Saudável é o Laravel responder /health, com 200 ou 503: uma dependência fora
+      # do ar aparece no corpo, não como uma stack que não sobe.
+      test: ["CMD-SHELL", "wget -q -S -O /dev/null http://127.0.0.1/health 2>&1 | grep -qE 'HTTP/[0-9.]+ (200|503)'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+
+  # Execução única, por `make laravel-composer`: roda o composer sobre uma cópia de
+  # apis/laravel e devolve só composer.json e composer.lock.
+  composer:
+    profiles: ["tools"]
+    build:
+      <<: *php-build
+      target: base
+    image: cadastro-feliz-laravel-php-base
+    volumes:
+      - ./:/src
+
+networks:
+  default:
+    name: cadastro-feliz-net
+    external: true
