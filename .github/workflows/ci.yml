@@ -1,0 +1,64 @@
+# Testes do projeto no GitHub Actions. Referência: docs/infrastructure.md › Integração contínua.
+#
+# Os jobs chamam os mesmos comandos de quem desenvolve: `make test-frontend` e
+# `tests/infra/run.sh`. Cada arquivo de tests/infra roda em um runner próprio,
+# porque os testes destroem e recriam o ambiente cadastro-feliz-*.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (tipos e testes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Versões do Docker
+        run: docker version --format '{{.Server.Version}}' && docker compose version
+
+      - name: make test-frontend
+        run: make test-frontend
+
+  infra-suites:
+    name: Lista os testes de infraestrutura
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      suites: ${{ steps.list.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: list
+        name: Lê a lista de tests/infra/run.sh
+        run: echo "suites=$(bash tests/infra/run.sh --list | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
+
+  infra:
+    name: Infraestrutura (${{ matrix.suite }})
+    needs: infra-suites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.infra-suites.outputs.suites) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Versões do Docker
+        run: docker version --format '{{.Server.Version}}' && docker compose version
+
+      - name: tests/infra/run.sh ${{ matrix.suite }}
+        run: bash tests/infra/run.sh "${{ matrix.suite }}"

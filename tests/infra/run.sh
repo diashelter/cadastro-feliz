@@ -16,6 +16,15 @@ NETWORK=cadastro-feliz-net
 PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
+# Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh)
+
+# `--list` imprime os nomes, um por linha, sem tocar no Docker.
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' "${FILES[@]%.sh}"
+  exit 0
+fi
+
 FAILED=0
 
 pass() { echo "PASS $*"; }
@@ -91,7 +100,6 @@ shared_healthy() {
 
 # Sem argumentos roda todos os arquivos; com argumentos, só os nomeados, como em
 # `bash tests/infra/run.sh docs limiter`.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh)
 if [ "$#" -gt 0 ]; then
   FILES=()
   for name in "$@"; do
