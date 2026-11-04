@@ -67,7 +67,7 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 | `201` | Cadastro gravado, com usuário e evento na mesma transação |
 | `409` | E-mail já cadastrado |
 | `422` | Dados inválidos, incluindo e-mail com formato inválido |
-| `429` | Mais de 5 tentativas com o mesmo e-mail em 15 minutos; responde sem consultar o banco |
+| `429` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail em 15 minutos; responde sem consultar o banco |
 | `500` | Indisponibilidade da API |
 
 ## Como vai funcionar
@@ -168,7 +168,7 @@ cadastro-feliz/
 
 - **E-mails duplicados:** a entrega é *at-least-once*, então uma queda no momento errado pode enviar o e-mail duas vezes.
 - **Enumeração de e-mails:** o `409` revela que um e-mail já está cadastrado.
-- **Bloqueio por terceiros:** quem repetir o e-mail de outra pessoa pode bloquear esse cadastro por até 15 minutos.
+- **Bloqueio por quem divide o IP:** o limite conta o par IP e e-mail, então só quem está atrás do mesmo IP pode bloquear o cadastro de um e-mail alheio, por até 15 minutos.
 - **Ponto único de falha:** se o `redis-limiter` cair, nenhuma stack aceita cadastros até ele voltar.
 
 Este projeto é uma POC de estudo e não está preparado para produção.

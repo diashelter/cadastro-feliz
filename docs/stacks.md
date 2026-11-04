@@ -35,6 +35,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - Sempre responder JSON nos erros, mesmo sem o header `Accept: application/json`.
 - Não usar o formato de validação nativo, que traz `(and N more errors)` em `message` e só textos em `errors`. O corpo de erro segue a [forma do contrato](api-contract.md#forma-do-corpo-de-erro).
 - Configurar duas conexões Redis: `default` para a fila e `limiter` para o `redis-limiter`, sem o prefixo automático do Laravel.
+- Confiar só no `nginx` como proxy, para o IP do cliente usado no contador ser o que o `nginx` repassa. Ver [IP do cliente](api-contract.md#ip-do-cliente).
 - Não usar o `RateLimiter` do framework no contador, porque ele grava com chave e formato próprios. O `RegistrationAttemptLimiter` executa o [script do contrato](api-contract.md#operação-no-redis).
 - Não usar as migrations padrão. Ver [database.md](database.md#migrations).
 

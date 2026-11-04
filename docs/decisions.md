@@ -39,9 +39,13 @@ Um único schema, com migrations em SQL puro aplicadas pelo container `migrate`,
 
 ## 4. Bloqueio de 15 minutos em janela fixa
 
-Depois de 5 tentativas com o mesmo e-mail, a API responde 429 sem consultar o banco, o que reduz a carga causada por tentativas repetidas. A duração limita também o dano de um terceiro bloquear o e-mail de outra pessoa.
+Depois de 5 tentativas do mesmo IP com o mesmo e-mail, a API responde 429 sem consultar o banco, o que reduz a carga causada por tentativas repetidas.
 
-**Custo:** a janela fixa é simples, mas permite uma rajada na virada da janela.
+A chave combina IP e e-mail para que um terceiro não bloqueie o e-mail de outra pessoa: quem repete um e-mail alheio esgota só o contador do próprio IP. A duração limita o dano que resta, de quem divide o mesmo IP.
+
+**Custos**
+- A janela fixa é simples, mas permite uma rajada na virada da janela.
+- Trocar de IP dá mais 5 tentativas para o mesmo e-mail.
 
 ## 5. Redis comum para o contador de tentativas
 
@@ -51,7 +55,7 @@ O contador fica em um container compartilhado, o `redis-limiter`. Laravel e Nest
 
 **Motivos**
 - **Regra comum:** o limite de tentativas pertence ao cadastro, como o banco. A fila é um detalhe de cada stack.
-- **Limite consistente:** um e-mail bloqueado continua bloqueado ao trocar de stack.
+- **Limite consistente:** um par IP e e-mail bloqueado continua bloqueado ao trocar de stack.
 - **Cadastro independente da fila:** no desenho anterior, uma queda do Redis em Laravel e NestJS derrubava o cadastro junto com a fila.
 - **Configurações opostas:** a fila precisa de `noeviction`, e o BullMQ a exige. O contador é descartável e não precisa de persistência.
 

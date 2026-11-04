@@ -49,7 +49,7 @@ flowchart TD
 
 1. **Validar o corpo.** Essa etapa não usa Redis nem banco.
 2. **Normalizar o e-mail**, com `trim` e minúsculas.
-3. **Contar a tentativa** no `redis-limiter`.
+3. **Contar a tentativa** no `redis-limiter`, pelo par IP do cliente e e-mail normalizado.
 4. **Gravar** `users` e `users_outbox` na mesma transação. Não há `SELECT` prévio: a duplicidade é detectada pela constraint `UNIQUE`, o que também evita condição de corrida entre requisições simultâneas.
 
 Qualquer indisponibilidade em qualquer etapa resulta em 500.
@@ -61,7 +61,7 @@ Qualquer indisponibilidade em qualquer etapa resulta em 500.
 | `201 Created` | Cadastro gravado | `data` e `message` |
 | `409 Conflict` | E-mail já cadastrado | `message` e `errors` com o item `already_taken` |
 | `422 Unprocessable Entity` | JSON malformado, campos ausentes ou inválidos | `message` e `errors` com os erros de campo |
-| `429 Too Many Requests` | Mais de 5 tentativas com o mesmo e-mail na janela | `message` e `errors` vazio, com header `Retry-After` |
+| `429 Too Many Requests` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail na janela | `message` e `errors` vazio, com header `Retry-After` |
 | `500 Internal Server Error` | Banco ou `redis-limiter` indisponível, ou erro inesperado | `message` e `errors` vazio |
 
 #### Forma do corpo de erro
@@ -168,16 +168,44 @@ Nenhum detalhe interno é exposto. A causa vai para os logs.
 
 | Item | Valor |
 |---|---|
-| Identidade contada | E-mail normalizado |
+| Identidade contada | Par IP do cliente + e-mail normalizado |
 | Armazenamento | `redis-limiter`, comum às três stacks |
-| Chave | `registration:attempts:{sha256(email)}`, sem nenhum prefixo de framework |
+| Chave | `registration:attempts:{sha256(ip + "\|" + email)}`, sem nenhum prefixo de framework |
 | Limite | 5 tentativas (`REGISTRATION_MAX_ATTEMPTS`) |
 | Janela | Fixa, 15 minutos a partir da primeira tentativa (`REGISTRATION_ATTEMPT_WINDOW_SECONDS`) |
 | O que conta | Toda tentativa com corpo válido, inclusive a que teve sucesso |
 | O que não conta | Tentativas que falham na validação (422) |
 | `redis-limiter` indisponível | A API retorna 500 em vez de aceitar cadastros sem limite |
 
-O hash evita guardar o e-mail em claro no Redis.
+O hash evita guardar o e-mail e o IP em claro no Redis.
+
+Como a chave combina IP e e-mail, quem repete o e-mail de outra pessoa a partir do próprio IP esgota só o próprio contador. A pessoa dona do e-mail, em outro IP, continua conseguindo se cadastrar.
+
+### Chave
+
+As três stacks precisam gerar exatamente os mesmos bytes, senão o limite deixa de valer na troca de stack.
+
+1. Monte o texto `{ip}|{email}`, em UTF-8, com o IP na forma canônica abaixo e o e-mail já normalizado (`trim` e minúsculas).
+2. Calcule o SHA-256 desse texto e escreva em hexadecimal minúsculo.
+3. Prefixe com `registration:attempts:`.
+
+| Entrada | Chave |
+|---|---|
+| IP `203.0.113.10`, e-mail `ana@example.com` | `registration:attempts:da657b591c8d33639918ea46be3b50e2bb1173313d08cf019556c130426a63a8` |
+
+Esse exemplo serve de teste nas três stacks.
+
+### IP do cliente
+
+| Regra | Valor |
+|---|---|
+| Origem | Endereço da conexão TCP que chegou à aplicação |
+| Proxy confiável | Só o `nginx` da stack Laravel. O `php-fpm` lê o IP que esse `nginx` repassa e não confia em proxy nenhum além dele |
+| `X-Forwarded-For` enviado pelo cliente | Ignorado nas três stacks. Aceitar esse header permitiria trocar de IP a cada requisição e contornar o limite |
+| IPv4 mapeado em IPv6 (`::ffff:203.0.113.10`) | Convertido para IPv4 (`203.0.113.10`) |
+| IPv6 | Forma comprimida e em minúsculas (RFC 5952), sem zona (`%eth0`) |
+
+Em ambiente local, a requisição do navegador chega ao container pelo gateway da rede Docker, então todas as pessoas da máquina aparecem com o mesmo IP. Como as três stacks estão na mesma rede `cadastro-feliz-net`, esse IP é o mesmo em todas, e o limite continua valendo na troca de stack.
 
 ### Operação no Redis
 
@@ -197,7 +225,7 @@ return { attempts, redis.call('TTL', KEYS[1]) }
 
 Cada stack mantém uma cópia desse script. Este documento é a referência para todas elas.
 
-Sequência com o mesmo e-mail dentro da janela:
+Sequência com o mesmo e-mail, a partir do mesmo IP, dentro da janela:
 
 | Tentativa | Situação | Resposta | Consulta o banco? |
 |---|---|---|---|
@@ -208,8 +236,9 @@ Sequência com o mesmo e-mail dentro da janela:
 ## Limitações conhecidas
 
 - **Enumeração de e-mails:** o 409 revela que um e-mail já está cadastrado.
-- **Bloqueio por terceiros:** como o limite é por e-mail, qualquer pessoa pode bloquear temporariamente o cadastro de um endereço alheio, por no máximo 15 minutos.
-- **Sem limite por IP:** muitas tentativas com e-mails diferentes não são barradas.
+- **Bloqueio por quem divide o IP:** quem está atrás do mesmo IP (a mesma rede com NAT, por exemplo) ainda pode bloquear o cadastro de um e-mail alheio por até 15 minutos. Pessoas em outros IPs não são afetadas.
+- **Troca de IP contorna o limite:** cada IP novo ganha mais 5 tentativas para o mesmo e-mail.
+- **Sem limite só por IP:** muitas tentativas de um IP com e-mails diferentes não são barradas.
 - **Ponto único de falha:** se o `redis-limiter` cair, nenhuma stack aceita cadastros até ele voltar.
 - **Respostas fora do contrato:** 404, 405, `Content-Type` errado e corpo que não é objeto não têm formato definido, e cada framework responde do seu jeito.
 - **Quantidade de erros por campo:** um e-mail longo e inválido pode trazer um ou dois itens em `errors`, conforme a stack, então o texto exibido pode variar entre elas.
