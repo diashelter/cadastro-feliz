@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). Os composes das stacks ainda não foram criados.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx` e `php-fpm`, e é testado por `make test-infra` e `make test-laravel`; os de NestJS e Go ainda não foram criados.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
@@ -36,7 +36,7 @@ flowchart TB
 | Arquivo | Nome do projeto | Serviços |
 |---|---|---|
 | `docker-compose.yml` | `cadastro-feliz-shared` | `frontend`, `postgres`, `redis-limiter`, `mailpit`, `migrate` |
-| `apis/laravel/docker-compose.yml` | `cadastro-feliz-laravel` | `nginx`, `php-fpm`, `scheduler`, `horizon`, `redis` |
+| `apis/laravel/docker-compose.yml` | `cadastro-feliz-laravel` | `nginx` e `php-fpm`; `scheduler`, `horizon` e `redis` chegam com o outbox |
 | `apis/nestjs/docker-compose.yml` | `cadastro-feliz-nest` | `api`, `worker`, `redis` |
 | `apis/golang/docker-compose.yml` | `cadastro-feliz-go` | `api`, `worker`, `rabbitmq` |
 
@@ -81,9 +81,12 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make watch-frontend` | Reconstrói e sobe o `frontend` e fica em primeiro plano copiando cada edição de `frontend/src` para o container. Uma mudança em `package.json`, `package-lock.json` ou `next.config.ts` reconstrói a imagem. Ctrl+C encerra só a sincronização |
 | `make frontend-npm ARGS="<comando npm>"` | Roda o npm do frontend em um container descartável, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `frontend/` |
 | `make test-frontend` | Reconstrói a imagem do `frontend` com o código atual e, num container descartável, checa os tipos e roda os testes do Vitest. Não recria nem para o `frontend` em execução, e remove a rede quando foi ele que a criou |
-| `make up-laravel` | Sobe a stack Laravel |
+| `make up-laravel` | Sobe a stack Laravel, reconstruindo a imagem do `php-fpm` com o código atual |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |
+| `make watch-laravel` | Sobe a stack Laravel como `make up-laravel` e fica em primeiro plano copiando cada edição de `app`, `bootstrap`, `config`, `routes` e `tests` para o `php-fpm`. Uma mudança em `composer.json`, `composer.lock` ou `docker/php` reconstrói a imagem. Ctrl+C encerra só a sincronização. A regra é genérica, `make watch-<stack>`, e recusa uma stack sem compose |
+| `make laravel-composer ARGS="<comando composer>"` | Roda o composer da stack Laravel em um container descartável, com o usuário de quem chama, sobre uma cópia de `apis/laravel`. Só `composer.json` e `composer.lock` voltam, e só quando o composer termina sem erro |
+| `make test-laravel` | Reconstrói a imagem do `php-fpm` com o código atual e roda `php artisan test` num container descartável, sem banco nem Redis. Não recria nem para o `php-fpm` em execução, e remove a rede quando foi ele que a criou |
 | `make down-laravel` | Derruba a stack Laravel |
 | `make down-nest` | Derruba a stack NestJS |
 | `make down-go` | Derruba a stack Go |
@@ -102,7 +105,7 @@ Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `lara
 2. Derruba as outras stacks.
 3. Sobe o PostgreSQL, o `redis-limiter` e o Mailpit e espera que fiquem saudáveis. O `frontend` não é construído nem iniciado aqui; ele sobe com `make up-shared`.
 4. Executa o `migrate`. Se ele falha, o comando para com código diferente de zero e a stack não sobe.
-5. Sobe a stack e espera seus containers ficarem no ar.
+5. Reconstrói as imagens da stack com o código atual, sobe a stack e espera seus containers ficarem no ar.
 
 O Compose não ordena serviços de projetos diferentes, por isso essa ordem é responsabilidade do `Makefile`.
 
@@ -115,6 +118,8 @@ O Compose não ordena serviços de projetos diferentes, por isso essa ordem é r
 | `mailpit` | `axllent/mailpit:v1.33.0` |
 | `migrate` | `migrate/migrate:v4.20.1` |
 | `frontend` | `cadastro-feliz-shared-frontend`, construída de `frontend/Dockerfile` sobre `node:26.13.0-alpine`, com `next` 16.4.5 e `react` 19.3.1 fixados em `frontend/package.json` |
+| `nginx` (Laravel) | `nginx:1.30.6-alpine` |
+| `php-fpm` (Laravel) | `cadastro-feliz-laravel-php-fpm`, construída de `apis/laravel/docker/php/Dockerfile` sobre `php:8.5.12-fpm-alpine`, com `pdo_pgsql`, phpredis 6.3.0 e o composer de `composer:2.11.1`; `laravel/framework` v13.40.0 travado em `apis/laravel/composer.lock` |
 
 ### O que cada `down` faz com os dados
 
@@ -134,13 +139,23 @@ O `frontend` roda `next dev` na porta 3000, como o usuário `node`. Não há bui
 - **`NEXT_PUBLIC_API_URL` é lido quando o container inicia.** Trocar o valor no `.env` e rodar `make up-shared` recria o container sem reconstruir a imagem.
 - **Saudável é responder HTTP.** Um erro de compilação aparece no navegador e não deixa o serviço `unhealthy`.
 
+## Containers da stack Laravel
+
+O `nginx` publica a porta 8080 e encaminha toda requisição para o Laravel no `php-fpm`. Não há build de produção: o OPcache revalida os arquivos a cada requisição (decisão 20 de [decisions.md](decisions.md)).
+
+- **O código entra por cópia, não por bind mount.** A imagem leva o código e o `vendor/`. Com `make watch-laravel` rodando, cada edição vale na próxima requisição, sem reiniciar o container. `vendor/` nunca existe na máquina.
+- **Saudável é o Laravel responder `/health`.** O `nginx` fica saudável quando `GET /health` responde `200` ou `503`; o `php-fpm`, quando responde ao ping do FPM. Uma dependência fora do ar aparece no corpo de `/health`, e a stack continua no ar.
+- **Variáveis só do `.env` da raiz.** `apis/laravel` não tem `.env`; o compose repassa ao `php-fpm` as variáveis de que o Laravel precisa.
+- **Nenhuma tabela do framework.** Sessão e cache ficam em memória, a fila é `sync` e o log vai para a saída de erro do container, que `make logs-laravel` acompanha.
+
 ## Integração contínua
 
-O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request, a cada push na `main` e sob demanda, pela aba *Actions*. Ele chama os mesmos comandos usados na máquina, sobre o Docker do runner `ubuntu-24.04`, sem instalar Node. O Compose do runner é anterior ao 2.39, então cada job instala antes o Compose fixado em `COMPOSE_VERSION`, conferido pelo checksum publicado em `COMPOSE_SHA256`.
+O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request, a cada push na `main` e sob demanda, pela aba *Actions*. Ele chama os mesmos comandos usados na máquina, sobre o Docker do runner `ubuntu-24.04`, sem instalar Node nem PHP. O Compose do runner é anterior ao 2.39, então cada job instala antes o Compose fixado em `COMPOSE_VERSION`, conferido pelo checksum publicado em `COMPOSE_SHA256`.
 
 | Job | O que roda |
 |---|---|
 | Frontend (tipos e testes) | `make test-frontend` |
+| Laravel (testes) | `make test-laravel` |
 | Lista os testes de infraestrutura | `bash tests/infra/run.sh --list`, que imprime os arquivos de `tests/infra` na ordem do `make test-infra` |
 | Infraestrutura (`<arquivo>`) | `bash tests/infra/run.sh <arquivo>`, um job por arquivo da lista |
 
@@ -158,7 +173,7 @@ Como `localhost:3000` e `localhost:8080` são origens diferentes, cada API preci
 
 ## Variáveis de ambiente
 
-Os valores abaixo são padrões para uso local, sem nenhum segredo real. Cada framework ainda terá variáveis próprias, como `APP_KEY` no Laravel.
+Os valores abaixo são padrões para uso local, sem nenhum segredo real, inclusive o `APP_KEY` do Laravel.
 
 ### Compartilhadas
 
@@ -198,3 +213,6 @@ Os valores abaixo são padrões para uso local, sem nenhum segredo real. Cada fr
 | `REDIS_HOST` | `redis` | Laravel e NestJS (só a fila) |
 | `REDIS_PORT` | `6379` | Laravel e NestJS (só a fila) |
 | `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | Go |
+| `APP_KEY` | `base64:` seguido de 32 bytes, fixo em `.env.example` | Laravel |
+| `APP_ENV` | `local` | Laravel |
+| `APP_DEBUG` | `true` | Laravel |

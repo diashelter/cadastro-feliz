@@ -47,8 +47,9 @@ de verdade, com dependências reais paradas e pausadas.
    nada (door 2): copia cada mudança de `app`, `bootstrap`, `config`, `routes` e `tests` para o
    `php-fpm`, e reconstrói a imagem quando `composer.json`, `composer.lock` ou `docker/php` mudam
 8. `make laravel-composer ARGS="..."` -> `Makefile` (exists) - recusa sem `ARGS`; com `ARGS`, roda
-   o composer no serviço descartável `composer` (door 2), com `apis/laravel` montado, o usuário de
-   quem chamou e `vendor/` e `bootstrap/cache` em memória; grava só `composer.json` e `composer.lock`
+   o composer no serviço descartável `composer` (doors 2 e 7), da imagem `base`, com o usuário de
+   quem chamou, sobre uma cópia de `apis/laravel` dentro do container; devolve só `composer.json`
+   e `composer.lock`, e só quando o composer termina sem erro
 9. `make test-laravel` -> `Makefile` (exists) - reconstrói a imagem do `php-fpm` e roda
    `php artisan test` num container descartável, sem dependências, sem tocar no `php-fpm` em
    execução; o job `laravel` do CI chama o mesmo alvo
@@ -119,6 +120,7 @@ volume é lido ou escrito, e o schema não muda.
 | 4. `make up-<stack>` reconstrói | o último passo de `up-%` vira `up --detach --build --wait`, para as três stacks | rebuild manual - uma edição feita sem o watch ficaria invisível até alguém lembrar de reconstruir, como o frontend já resolveu em `make up-shared` |
 | 5. dependências novas | `laravel/laravel` `v13.11.0` como esqueleto, com `laravel/framework` `v13.40.0` e `phpunit/phpunit` da série 12 travados em `composer.lock`, que é a fonte do `composer install` da imagem; `nginx:1.30.6-alpine`, `php:8.5.12-fpm-alpine`, `composer:2.11.1`, phpredis `6.3.0` | `predis/predis` - cliente em PHP, dispensaria compilar a extensão, mas o phpredis é o cliente padrão do Laravel (design, Alternatives considered) |
 | 6. Laravel sem tabelas e sem `.env` próprio | padrões no código: conexão de banco `pgsql`, sessão `array`, cache `array`, fila `sync`, log em `stderr`; `apis/laravel/database/migrations` não existe; `apis/laravel` não tem `.env` nem `.env.example`; `APP_KEY` (`base64:` com 32 bytes), `APP_ENV=local` e `APP_DEBUG=true` em `.env.example` › Específicas de stack, com valores locais fixos | os padrões de um projeto novo do Laravel 13 - sessão, cache e fila no driver `database`, em tabelas que o schema não tem e que `artisan migrate` nunca cria (Key decision 6 do design) |
+| 7. composer sobre uma cópia (achado no build, ajusta door 2) | o `Dockerfile` tem dois estágios: `base` (PHP, extensões, `composer`, sem código) e `app` (vendor e código, o que o `php-fpm` roda); o serviço `composer` usa `target: base`, imagem `cadastro-feliz-laravel-php-base`, `apis/laravel` montado em `/src`; o alvo copia `/src` para `/tmp/app`, roda o composer lá e copia de volta só `composer.json` e `composer.lock` | `tmpfs` sobre `vendor` dentro do bind mount - o Docker cria o ponto de montagem `apis/laravel/vendor` na máquina, vazio e com dono root, o que contradiz o critério 27; a imagem do `php-fpm` no serviço `composer` - ela roda `composer install` do lock, então um lock quebrado impediria o próprio `make laravel-composer` de consertá-lo |
 
 - Nothing else in this change is hard to reverse
 

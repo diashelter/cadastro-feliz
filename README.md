@@ -4,7 +4,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. A base da stack Laravel funciona: `make up-laravel` sobe `nginx` e `php-fpm`, e `GET /health` diz se o banco e o contador respondem. NestJS e Go ainda estão em design, e os comandos delas recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -72,9 +72,11 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 | `429` | Mais de 5 tentativas do mesmo IP com o mesmo e-mail em 15 minutos, ou mais de 20 cadastros por IP em uma hora; responde sem consultar o banco |
 | `500` | Indisponibilidade da API |
 
+Todas expõem também `GET /health`, que responde `200` quando o PostgreSQL e o `redis-limiter` respondem e `503` quando algum deles falha, com o mesmo corpo nos dois casos. Ver o [contrato](docs/api-contract.md#get-health).
+
 ## Como vai funcionar
 
-> Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
+> Por enquanto só a stack Laravel tem o próprio `docker-compose.yml`; os alvos de NestJS e Go recusam até terem o deles. `make up-shared` e `make migrate` sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
 
 O único pré-requisito é Docker com Docker Compose 2.39 ou mais recente, além do `make`.
 
@@ -150,6 +152,24 @@ Checar os tipos e rodar os testes do frontend, sem Node na máquina:
 make test-frontend
 ```
 
+Editar a stack Laravel com recarga automática. O comando sobe a stack como `make up-laravel` e fica em primeiro plano copiando cada edição para o container; Ctrl+C encerra só a sincronização:
+
+```bash
+make watch-laravel
+```
+
+Acrescentar uma dependência à stack Laravel, sem PHP nem Composer na máquina:
+
+```bash
+make laravel-composer ARGS="require <pacote>"
+```
+
+Rodar os testes da stack Laravel, sem PHP na máquina:
+
+```bash
+make test-laravel
+```
+
 Limpar os contadores de tentativas, para repetir testes do `429`:
 
 ```bash
@@ -169,6 +189,7 @@ make test-infra
 | Formulário | <http://localhost:3000> | Sempre |
 | Caixa de e-mail (Mailpit) | <http://localhost:8025> | Sempre |
 | API | <http://localhost:8080> | Com uma stack ativa |
+| Saúde da API | <http://localhost:8080/health> | Com uma stack ativa |
 | Painel do Horizon | <http://localhost:8080/horizon> | Só na stack Laravel |
 | Painel do RabbitMQ | <http://localhost:15672> | Só na stack Go |
 
@@ -185,10 +206,10 @@ cadastro-feliz/
 ├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
 ├── frontend/                 # Next.js em next dev, com o formulário
-└── apis/                     # planejado
-    ├── laravel/
-    ├── nestjs/
-    └── golang/
+└── apis/
+    ├── laravel/              # nginx, php-fpm e GET /health
+    ├── nestjs/               # planejado
+    └── golang/               # planejado
 ```
 
 ## Documentação

@@ -1,6 +1,6 @@
 # Contrato da API
 
-> **Status:** em construção. Nenhuma stack implementa `POST /users` ainda. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
+> **Status:** em construção. Nenhuma stack implementa `POST /users` ainda. A stack Laravel implementa [`GET /health`](#get-health), testado por `make test-laravel` e `make test-infra`. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
 
 As três stacks expõem exatamente o mesmo contrato em `http://localhost:8080`. O frontend não sabe qual delas está respondendo.
 
@@ -316,6 +316,25 @@ Sequência a partir do mesmo IP, com e-mails novos, dentro da janela:
 | 21º em diante | 429 | Não |
 | E-mail já cadastrado, com cota livre | 409, a reserva é devolvida | Sim |
 
+## `GET /health`
+
+Diz se a API alcança as dependências de que o cadastro precisa: o PostgreSQL (`database`) e o `redis-limiter` (`limiter`). Não grava nada e não tem autenticação. É igual nas três stacks (decisão 19).
+
+```http
+GET /health HTTP/1.1
+Host: localhost:8080
+```
+
+| Status | Quando | Corpo |
+|---|---|---|
+| `200` | As duas dependências respondem | `{"status":"ok","checks":{"database":"ok","limiter":"ok"}}` |
+| `503` | Alguma dependência falha | `{"status":"fail","checks":{"database":"ok","limiter":"fail"}}`, com `fail` em cada check que falhou |
+
+- **Mesma forma nos dois status:** `status` é `ok` só quando todos os checks são `ok`, e o corpo não tem nenhuma outra chave. Os valores de cada check são só `ok` e `fail`; o motivo de uma falha vai para o log da stack, nunca para o corpo.
+- **Resposta rápida:** cada check desiste em 1 s, então `/health` responde em menos de `3 s` mesmo com uma dependência travada.
+- **Sem cache:** as duas respostas têm `Content-Type: application/json` e `Cache-Control: no-store`.
+- **Saúde do container:** o container da API está saudável quando `/health` responde, com `200` ou `503`. Uma dependência fora do ar aparece no corpo, e a stack continua no ar.
+
 ## Limitações conhecidas
 
 - **Enumeração de e-mails:** o 409 revela que um e-mail já está cadastrado.
@@ -324,7 +343,7 @@ Sequência a partir do mesmo IP, com e-mails novos, dentro da janela:
 - **Cota dividida por quem tem o mesmo IP:** pessoas atrás do mesmo IP (a mesma rede com NAT, por exemplo) dividem a cota de 20 cadastros por hora.
 - **Devolução que falha:** se a devolução da reserva falhar, ou a API cair entre a reserva e a resposta, a cota fica com uma unidade a mais até a janela expirar.
 - **Ponto único de falha:** se o `redis-limiter` cair, nenhuma stack aceita cadastros até ele voltar.
-- **Respostas fora do contrato:** 404, 405, `Content-Type` errado e corpo que não é objeto não têm formato definido, e cada framework responde do seu jeito.
+- **Respostas fora do contrato:** 404, 405, `Content-Type` errado e corpo que não é objeto não têm formato definido, e cada framework responde do seu jeito. A stack Laravel responde esses casos em JSON, mas sem a forma da decisão 14.
 - **Quantidade de erros por campo:** um e-mail longo e inválido pode trazer um ou dois itens em `errors`, conforme a stack, então o texto exibido pode variar entre elas.
 
 Essas limitações são aceitas nesta POC, cujo foco é o padrão outbox.

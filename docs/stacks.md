@@ -1,6 +1,6 @@
 # Stacks
 
-> **Status:** em construção. As três stacks estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
+> **Status:** em construção. A [base da stack Laravel](#laravel) existe, com `nginx`, `php-fpm` e `GET /health`. NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
 
 ## Visão geral
 
@@ -16,13 +16,20 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 
 ## Laravel
 
-| Container | Função |
-|---|---|
-| `nginx` | Publica a API na porta 8080 e encaminha para o `php-fpm` |
-| `php-fpm` | Executa a API |
-| `scheduler` | Roda `schedule:work`, que dispara o relay a cada segundo |
-| `horizon` | Consome a fila `registration-emails` e envia os e-mails |
-| `redis` | Fila do Horizon, com `noeviction` |
+| Container | Função | Estado |
+|---|---|---|
+| `nginx` | Publica a API na porta 8080 e encaminha para o `php-fpm` | Existe |
+| `php-fpm` | Executa a API | Existe |
+| `scheduler` | Roda `schedule:work`, que dispara o relay a cada segundo | Chega com o outbox |
+| `horizon` | Consome a fila `registration-emails` e envia os e-mails | Chega com o outbox |
+| `redis` | Fila do Horizon, com `noeviction` | Chega com o outbox |
+
+**O que já existe.** `nginx` e `php-fpm` existem, com Laravel 13 sobre PHP 8.5, e o único endpoint é `GET /health`, que consulta o PostgreSQL e o `redis-limiter` ([contrato](api-contract.md#get-health)). `scheduler`, `horizon` e `redis` chegam com o outbox, porque sem o relay e o job não há o que rodar.
+
+- **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
+- **Dependências:** `make laravel-composer ARGS="<comando composer>"` é o único caminho, e só `composer.json` e `composer.lock` mudam na máquina.
+- **Testes:** PHPUnit, em `apis/laravel/tests`, rodando com `make test-laravel` num container descartável.
+- **Sem tabelas do framework:** sessão e cache em memória, fila `sync` até o outbox, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
 
 **Como o outbox funciona aqui**
 - **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`. Ele faz a seleção do lote e o `dispatch` de `SendRegistrationEmailJob`.
@@ -45,15 +52,21 @@ Com a API no ar e em ambiente local, o painel do Horizon fica em `http://localho
 apis/laravel/
 ├── docker-compose.yml
 ├── docker/
+│   ├── nginx/default.conf
+│   └── php/Dockerfile
+├── routes/api.php            # rotas na raiz, sem /api
 └── app/Modules/
-    ├── Users/
+    ├── Health/               # existe: GET /health
+    │   ├── Checks/
+    │   └── Http/Controllers/HealthController.php
+    ├── Users/                # planejado
     │   ├── Actions/RegisterUserAction.php
     │   ├── Http/Controllers/UserController.php
     │   ├── Http/Requests/StoreUserRequest.php
     │   ├── Http/Resources/UserResource.php
     │   ├── Models/User.php
     │   └── Services/RegistrationAttemptLimiter.php
-    └── Outbox/
+    └── Outbox/               # planejado
         ├── Console/RelayOutboxCommand.php
         ├── Jobs/SendRegistrationEmailJob.php
         ├── Mail/RegistrationCompletedMail.php
@@ -179,6 +192,7 @@ cadastro-feliz/
 
 ## Testes previstos em cada stack
 
+- **Saúde:** `GET /health` com `200` e com `503` para cada dependência, com o corpo do contrato.
 - **Feature do endpoint:** 201, 409, 422, 429 e 500, com os corpos do contrato.
 - **Atomicidade:** uma falha ao gravar o outbox não deixa usuário gravado.
 - **Relay:** publica eventos prontos, ignora os que estão em espera e republica os expirados.

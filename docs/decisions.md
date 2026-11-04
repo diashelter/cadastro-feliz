@@ -24,6 +24,8 @@
 | [16](#16-frontend-em-next-dev-com-o-código-copiado-pelo-compose-watch) | Frontend em `next dev` com o código copiado pelo Compose Watch | Definida |
 | [17](#17-cota-de-cadastros-concluídos-por-ip) | Cota de cadastros concluídos por IP | Definida |
 | [18](#18-formulário-sem-validação-no-navegador) | Formulário sem validação no navegador | Definida |
+| [19](#19-get-health-comum-às-três-stacks) | `GET /health` comum às três stacks | Definida |
+| [20](#20-código-da-stack-laravel-copiado-pelo-compose-watch) | Código da stack Laravel copiado pelo Compose Watch | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -200,3 +202,35 @@ O formulário envia nome e e-mail exatamente como foram digitados, sem `trim` e 
 
 **Custos**
 - Cada erro de digitação custa uma requisição, que não conta como tentativa, porque o 422 não conta.
+
+## 19. `GET /health` comum às três stacks
+
+Toda stack expõe `GET /health`, na raiz e sem prefixo, com o mesmo corpo no `200` e no `503`: `status` e um item em `checks` para cada dependência da API, `database` (PostgreSQL) e `limiter` (`redis-limiter`), cada um `ok` ou `fail`. A resposta chega em menos de 3 s mesmo com uma dependência travada, porque cada check desiste em 1 s. O motivo de uma falha vai para o log, nunca para o corpo. O detalhamento está em [api-contract.md](api-contract.md#get-health) e no [design](../.design/laravel-api-base.md).
+
+**Motivos**
+- **Stacks intercambiáveis:** um `/health` igual na porta 8080 permite que os testes de infraestrutura e o CI verifiquem qualquer stack da mesma forma.
+- **A base prova as conexões:** antes de `POST /users`, a stack mostra que alcança o banco e o contador, separando um erro de rede de um erro de regra.
+- **Saúde do container sem depender das dependências:** o container está saudável quando a API responde `/health` com `200` ou `503`; uma queda do contador aparece no corpo, não como uma stack que não sobe.
+
+**Alternativas descartadas**
+- **A rota nativa de cada framework, como o `/up` do Laravel:** responde HTML e `500`, sem dizer qual dependência caiu, e muda de stack para stack.
+- **A forma de erro da decisão 14 no `503`:** ela é para erros de entrada de `POST /users`; aqui o `503` é um relatório de estado, lido com o mesmo código que o `200`.
+
+**Custos**
+- NestJS e Go precisam implementar a mesma rota, o mesmo corpo e o mesmo limite de tempo.
+- O Mailpit e a fila não entram no `/health`, porque a API não fala com eles.
+
+## 20. Código da stack Laravel copiado pelo Compose Watch
+
+O código chega ao `php-fpm` só por cópia, nunca por bind mount. A imagem leva o código e o `vendor/`; `make watch-laravel` copia cada edição para o container, onde ela vale na próxima requisição, e reconstrói a imagem quando `composer.json`, `composer.lock` ou `docker/php` mudam. As dependências mudam só por `make laravel-composer`, que roda o composer num container descartável e devolve só `composer.json` e `composer.lock`. `vendor/` nunca existe na máquina. O detalhamento está no [design](../.design/laravel-api-base.md).
+
+**Motivos**
+- **Mesmo fluxo do frontend:** a decisão 16 já copia o código pelo Compose Watch, e quem edita uma parte do projeto usa o mesmo gesto na outra.
+- **Só Docker e `make`:** o README promete que a máquina não precisa de PHP nem de Composer.
+
+**Alternativas descartadas**
+- **Bind mount de `apis/laravel`:** dispensaria o terminal do watch e deixaria `vendor/` visível para a IDE, mas criaria o `vendor/` na máquina e um fluxo diferente do frontend.
+
+**Custos**
+- A IDE não enxerga `vendor/` para autocompletar o Laravel.
+- Editar exige `make watch-laravel` rodando; sem ele, a edição só entra no próximo `make up-laravel`.
