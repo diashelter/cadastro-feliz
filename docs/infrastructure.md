@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em design. O `Makefile`, os arquivos Compose e o `.env.example` descritos aqui ainda não existem.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados e o `.env.example` existem e são testados por `make test-infra`. O serviço `frontend` e os composes das stacks ainda não existem.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose, além do `make`.
 
@@ -76,6 +76,8 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 
 | Alvo | O que faz |
 |---|---|
+| `make up-shared` | Cria `.env` a partir de `.env.example` se ele não existir, cria a rede e sobe os serviços compartilhados, esperando que fiquem saudáveis |
+| `make migrate` | Aplica as migrations pendentes; sobe os serviços compartilhados antes, se necessário |
 | `make up-laravel` | Sobe a stack Laravel |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |
@@ -85,15 +87,30 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make down` | Derruba as stacks e os serviços compartilhados |
 | `make status` | Lista os containers do projeto e seu estado |
 | `make logs-laravel`, `make logs-nest`, `make logs-go` | Acompanha os logs da stack |
+| `make logs-shared` | Acompanha os logs dos serviços compartilhados |
 | `make reset-limits` | Limpa os contadores de tentativas no `redis-limiter` |
+| `make test-infra` | Testa a infraestrutura contra o Docker local. Destrói o ambiente `cadastro-feliz-*`, então recusa rodar se ele já existir |
+
+Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `laravel` usa `apis/laravel` e o projeto `cadastro-feliz-laravel`, `nest` usa `apis/nestjs` e `cadastro-feliz-nest`, `go` usa `apis/golang` e `cadastro-feliz-go`. Um alvo de stack sem compose recusa com `stack <nome> ainda não implementada`, e um nome fora dessa lista recusa com `stack <nome> desconhecida`, nos dois casos antes de alterar qualquer coisa. Para acrescentar uma stack, basta criar o compose dela, com `name: cadastro-feliz-<nome>` e a rede `cadastro-feliz-net` declarada como externa.
 
 ### Sequência de `make up-<stack>`
 
-1. Cria a rede externa, se ainda não existir.
+1. Cria `.env` e a rede externa, se ainda não existirem.
 2. Derruba as outras stacks.
-3. Sobe os serviços compartilhados e espera o PostgreSQL e o `redis-limiter` ficarem saudáveis.
-4. Executa o `migrate`.
+3. Sobe os serviços compartilhados e espera o PostgreSQL, o `redis-limiter` e o Mailpit ficarem saudáveis.
+4. Executa o `migrate`. Se ele falha, o comando para com código diferente de zero e a stack não sobe.
 5. Sobe a stack e espera seus containers ficarem no ar.
+
+O Compose não ordena serviços de projetos diferentes, por isso essa ordem é responsabilidade do `Makefile`.
+
+### Versões fixadas
+
+| Serviço | Imagem |
+|---|---|
+| `postgres` | `postgres:18.6-alpine`, com o volume nomeado em `/var/lib/postgresql` |
+| `redis-limiter` | `redis:8.10.3-alpine` |
+| `mailpit` | `axllent/mailpit:v1.33.0` |
+| `migrate` | `migrate/migrate:v4.20.1` |
 
 ### O que cada `down` faz com os dados
 

@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 5,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "weak_test::a test that the migrate applies the schema must start from an empty volume a kept volume already carries the version from an earlier test",
+      "text": "A test that the migrate applies the schema must start from an empty volume; a kept volume already carries the version from an earlier test.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "shared-infrastructure"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C13 tests/infra/migrate.sh t_c13_starts_shared (infra)"
+      ],
+      "created": "2026-11-04T16:42:36Z",
+      "last_seen": "2026-11-04T16:42:36Z"
+    },
+    {
+      "id": "L-002",
+      "key": "weak_test::a command that should follow output logs f is proven by timeout s exit 124 not by a line in its output",
+      "text": "A command that should follow output (logs -f) is proven by timeout's exit 124, not by a line in its output.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "shared-infrastructure"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C25 tests/infra/shared.sh t_c25_logs (infra)"
+      ],
+      "created": "2026-11-04T16:42:36Z",
+      "last_seen": "2026-11-04T16:42:36Z"
+    },
+    {
+      "id": "L-003",
+      "key": "weak_test::a claim that a file stays unchanged is proven by comparing the whole file before and after not one line",
+      "text": "A claim that a file stays unchanged is proven by comparing the whole file before and after, not one line.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "shared-infrastructure"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C2 tests/infra/shared.sh t_c2_keeps_env (infra)"
+      ],
+      "created": "2026-11-04T16:42:36Z",
+      "last_seen": "2026-11-04T16:42:36Z"
+    },
+    {
+      "id": "L-004",
+      "key": "weak_test::a listing claimed over every project must be asserted while a second project is up or a filter to one project passes",
+      "text": "A listing claimed over every project must be asserted while a second project is up, or a filter to one project passes.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "shared-infrastructure"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C24 tests/infra/shared.sh t_c24_status (infra)"
+      ],
+      "created": "2026-11-04T16:42:36Z",
+      "last_seen": "2026-11-04T16:42:36Z"
+    }
+  ]
+}
