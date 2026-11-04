@@ -192,6 +192,7 @@ Proof: run infra | PASS LV43 laravel-composer propagates composer failure
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
-- **Boundary:** none closed
-- **Abandoned:** none
+- **Dispatched:** Verifier at `d9c31a9` (no screens sub-agent: no criterion cites a capture)
+- **Boundary:** C1-C43 closed at `d9c31a9` (código em `6eb4f21`, testes em `9b4be3e`, docs em `d9c31a9`); `check_proofs.py` 48 pass, 0 fail em `d9c31a9`
+- **Abandoned:** `tmpfs` sobre `vendor` no serviço `composer` - o Docker criaria `apis/laravel/vendor` na máquina como ponto de montagem (virou a door 7 do plano). A imagem do `php-fpm` no serviço `composer` - um lock quebrado impediria `make laravel-composer` de consertá-lo. `php artisan test` lendo o `.env` ausente - o Collision mostra como aviso a leitura que o phpdotenv faz com `@`; o Laravel deixa de tentar ler o arquivo quando ele não existe. LV7 com `routes/api.php` ou o `HealthController` quebrados - o `package:discover` do build carrega os dois, então o caso só de execução usa o `LimiterCheck`
+- **Ambiente de prova:** o Docker desta sessão não alcança os espelhos do Alpine, o PECL nem os downloads do GitHub, e o Docker Hub anônimo responde 429. Só neste Docker, e fora do repositório: as imagens comuns vieram de `mirror.gcr.io` com a tag original; a tag `php:8.5.12-fpm-alpine` foi sobreposta por uma imagem construída da oficial com `pdo_pgsql.so`, `redis.so` (6.3.0), `libpq`, `liblz4`, `libfcgi` e `cgi-fcgi` copiados de `serversideup/php:8.5.12-fpm-alpine3.23` (PHP 8.5.12), `apk`, `pecl install redis-6.3.0` e `docker-php-ext-install` trocados por scripts que só copiam esses arquivos, e um cache offline do composer (`COMPOSER_DISABLE_NETWORK=1`) montado a partir dos clones git do lock; a tag `node:26.13.0-alpine` confia no certificado da sessão, para o `npm ci` do frontend no C22 de shared-infrastructure. Numa máquina com rede, o mesmo Dockerfile roda `apk`, `pecl` e `composer install` de verdade: esse caminho não foi exercido aqui, e o CI só o exercita num pull request ou num disparo manual
