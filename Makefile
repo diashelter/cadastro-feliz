@@ -83,10 +83,17 @@ frontend-npm:
 		--volume "$(CURDIR)/frontend:/app" frontend npm $(ARGS)
 
 # Constrói a imagem com o código atual e roda os testes num container descartável:
-# o container do frontend em execução não é recriado nem parado.
-test-frontend: env network
-	$(SHARED) build frontend
-	$(SHARED) run --rm --no-deps frontend npm test
+# o container do frontend em execução não é recriado nem parado. A rede só existe
+# durante o alvo quando ele a criou, para não deixar ambiente para trás.
+test-frontend: env
+	@created=0; \
+	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
+		docker network create $(NETWORK) >/dev/null && created=1; \
+	fi; \
+	$(SHARED) build frontend && $(SHARED) run --rm --no-deps frontend npm test; \
+	status=$$?; \
+	if [ $$created = 1 ]; then docker network rm $(NETWORK) >/dev/null; fi; \
+	exit $$status
 
 up-%:
 	$(call require_stack,$*)

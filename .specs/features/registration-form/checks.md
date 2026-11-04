@@ -5,7 +5,7 @@ Run front: `make test-frontend`
 Run infra: `bash tests/infra/run.sh docs frontend test-frontend`
 Plan: `.specs/features/registration-form/plan.md`
 
-27 checks in 3 slices · 4 one-way doors · 0 open, of which 0 block
+28 checks in 3 slices · 4 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -97,6 +97,9 @@ Proof: run infra | PASS RF24 help lists test-frontend
 
 ### S3 - Documentação alinhada
 
+**C28** - Num ambiente sem nada do projeto, `make test-frontend` sai com `0` e não deixa nenhum container, rede ou volume `cadastro-feliz-*` (AC 28)
+Proof: run infra | PASS RF28 test-frontend leaves no environment behind
+
 **C25** - docs/api-contract.md › Comportamento do frontend diz que não há validação no navegador, que `201` é sucesso com qualquer corpo, que `409`/`422` sem item de `name` ou `email` mostram o texto do `500`, a regra dos minutos com `1 minuto`, e `Muitas tentativas de cadastro. Tente novamente mais tarde.` (AC 25)
 Proof: run infra | PASS RF25 contract describes form rules
 
@@ -119,7 +122,7 @@ Proof: run infra | PASS RF27 docs describe the form and test-frontend
 | outros status, AC 13 (5) | `200` C13 · `400` C13 · `404` C13 · `405` C13 · `503` C13 | - |
 | corpos do 201, AC 5 (4) | do contrato C5 · `{}` C5 · vazio C5 · `não é json` C5 | - |
 | controles (3) | campo `Nome` C2 · campo `E-mail` C2 · botão `Cadastrar` C2 · C4 | - |
-| `make test-frontend` situações (5) | clone limpo C18 · teste falho C19 · erro de tipo C20 · frontend no ar C21 · código mudado C22 | - |
+| `make test-frontend` situações (6) | clone limpo C18 · teste falho C19 · erro de tipo C20 · frontend no ar C21 · código mudado C22 · ambiente vazio C28 | - |
 | dependências novas (6) | `vitest` C23 · `@vitejs/plugin-react` C23 · `jsdom` C23 · `@testing-library/react` C23 · `@testing-library/dom` C23 · `@testing-library/user-event` C23 | - |
 | documentos alterados (5) | `docs/api-contract.md` C25 · `docs/decisions.md` C26 · `docs/stacks.md` C27 · `docs/infrastructure.md` C27 · `README.md` C27 | - |
 | leitores da página em `tests/infra/frontend.sh` (5) | FE1 C1 · FE3 C1 · FE4 C1 · FE9 C1 · FE14 C1 - rodam no mesmo `Run infra` | - |

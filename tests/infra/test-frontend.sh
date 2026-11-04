@@ -54,6 +54,15 @@ t_rf18_clean_clone() {
 }
 check "RF18 test-frontend passes on a clean clone" t_rf18_clean_clone
 
+t_rf28_leaves_nothing() {
+  destroy_environment
+  rf_run || { note "make test-frontend saiu com erro"; return 1; }
+  any_containers && { note "sobrou container cadastro-feliz-*"; return 1; }
+  network_exists && { note "sobrou a rede $NETWORK"; return 1; }
+  [ -z "$(docker volume ls -q --filter name=^cadastro-feliz-)" ] || { note "sobrou volume cadastro-feliz-*"; return 1; }
+}
+check "RF28 test-frontend leaves no environment behind" t_rf28_leaves_nothing
+
 t_rf22_current_code() {
   rf_run || { note "make test-frontend não estava verde antes"; return 1; }
   write_failing_test

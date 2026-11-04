@@ -164,6 +164,7 @@ Os testes do frontend rodam com Docker e `make`, sobre o código atual, sem mexe
     - um teste novo que falha, acrescentado agora → `make test-frontend` sai com código diferente de `0`
 23. The `frontend/package.json` SHALL ter `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/dom` e `@testing-library/user-event` em `devDependencies`, com versão sem `^` nem `~`
 24. The saída de `make help` SHALL listar `make test-frontend`
+28. WHEN `make test-frontend` roda num ambiente sem nada do projeto THEN o sistema SHALL sair com código `0` e não deixar nenhum container, rede ou volume `cadastro-feliz-*` (acrescentado no build: a rede deixada para trás impedia `make test-infra` de rodar em seguida)
 
 ### S3: Documentação alinhada (P2)
 
