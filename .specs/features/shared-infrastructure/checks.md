@@ -139,6 +139,6 @@ Proof: run infra | PASS C28 database docs name the tool
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
+- **Dispatched:** Verifier at `67153a6` (no screens sub-agent: no criterion cites a capture)
 - **Boundary:** C1-C25 closed at `ccc1cb8`; C26-C28 closed at `96af70a`
 - **Abandoned:** comparar `pg_dump` cru em C12 - o pg_dump 18 sorteia a chave de `\restrict` a cada execução; o teste fixa `--restrict-key`. Grep por linha em C27 - acusava frases corretas ("se ele não existir"); o teste julga por frase
