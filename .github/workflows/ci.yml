@@ -1,0 +1,86 @@
+# Testes do projeto no GitHub Actions. Referência: docs/infrastructure.md › Integração contínua.
+#
+# Os jobs chamam os mesmos comandos de quem desenvolve: `make test-frontend` e
+# `tests/infra/run.sh`. Cada arquivo de tests/infra roda em um runner próprio,
+# porque os testes destroem e recriam o ambiente cadastro-feliz-*.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# O runner traz um Compose anterior ao 2.39, que recusa `build.provenance` do
+# docker-compose.yml. Instala uma versão fixada, conferida pelo checksum publicado.
+env:
+  COMPOSE_VERSION: v2.40.3
+  COMPOSE_SHA256: dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
+
+jobs:
+  frontend:
+    name: Frontend (tipos e testes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Instala o Docker Compose
+        run: |
+          dir="$HOME/.docker/cli-plugins"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -
+          chmod +x "$dir/docker-compose"
+          docker version --format '{{.Server.Version}}'
+          docker compose version
+
+      - name: make test-frontend
+        run: make test-frontend
+
+  infra-suites:
+    name: Lista os testes de infraestrutura
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      suites: ${{ steps.list.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: list
+        name: Lê a lista de tests/infra/run.sh
+        run: echo "suites=$(bash tests/infra/run.sh --list | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
+
+  infra:
+    name: Infraestrutura (${{ matrix.suite }})
+    needs: infra-suites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.infra-suites.outputs.suites) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Instala o Docker Compose
+        run: |
+          dir="$HOME/.docker/cli-plugins"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -
+          chmod +x "$dir/docker-compose"
+          docker version --format '{{.Server.Version}}'
+          docker compose version
+
+      - name: tests/infra/run.sh ${{ matrix.suite }}
+        run: bash tests/infra/run.sh "${{ matrix.suite }}"

@@ -1,8 +1,8 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`. Os composes das stacks ainda não foram criados.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). Os composes das stacks ainda não foram criados.
 
-Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose, além do `make`.
+Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
 ## Organização dos containers
 
@@ -133,6 +133,18 @@ O `frontend` roda `next dev` na porta 3000, como o usuário `node`. Não há bui
 - **Dependências mudam só por `make frontend-npm`.** O `package-lock.json` é a fonte do `npm ci` da imagem, e `frontend/.npmrc` grava versões exatas. `node_modules` nunca existe na máquina.
 - **`NEXT_PUBLIC_API_URL` é lido quando o container inicia.** Trocar o valor no `.env` e rodar `make up-shared` recria o container sem reconstruir a imagem.
 - **Saudável é responder HTTP.** Um erro de compilação aparece no navegador e não deixa o serviço `unhealthy`.
+
+## Integração contínua
+
+O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request, a cada push na `main` e sob demanda, pela aba *Actions*. Ele chama os mesmos comandos usados na máquina, sobre o Docker do runner `ubuntu-24.04`, sem instalar Node. O Compose do runner é anterior ao 2.39, então cada job instala antes o Compose fixado em `COMPOSE_VERSION`, conferido pelo checksum publicado em `COMPOSE_SHA256`.
+
+| Job | O que roda |
+|---|---|
+| Frontend (tipos e testes) | `make test-frontend` |
+| Lista os testes de infraestrutura | `bash tests/infra/run.sh --list`, que imprime os arquivos de `tests/infra` na ordem do `make test-infra` |
+| Infraestrutura (`<arquivo>`) | `bash tests/infra/run.sh <arquivo>`, um job por arquivo da lista |
+
+Os testes de infraestrutura destroem e recriam o ambiente `cadastro-feliz-*`, então cada arquivo roda em um runner próprio, em paralelo. A matriz vem de `run.sh --list`, e por isso um arquivo novo entra no CI quando é acrescentado à lista `FILES` de `tests/infra/run.sh`, sem mudar o workflow. Um push novo no mesmo branch cancela a execução anterior.
 
 ## Comunicação do frontend
 

@@ -16,6 +16,15 @@ NETWORK=cadastro-feliz-net
 PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
+# Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh)
+
+# `--list` imprime os nomes, um por linha, sem tocar no Docker.
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' "${FILES[@]%.sh}"
+  exit 0
+fi
+
 FAILED=0
 
 pass() { echo "PASS $*"; }
@@ -89,9 +98,41 @@ shared_healthy() {
   done
 }
 
+# Compose de uma stack falsa, usado por stack.sh e frontend.sh. Fica aqui porque
+# cada arquivo também roda sozinho, como no CI. O container só fica healthy depois
+# de ler a tabela users, então ele só sobe saudável se os comuns e o migrate rodaram antes.
+fake_stack() {
+  local name="$1" dir="$2"
+  mkdir -p "$WORK/$dir"
+  cat > "$WORK/$dir/docker-compose.yml" <<YAML
+name: cadastro-feliz-$name
+
+services:
+  api:
+    image: postgres:18.6-alpine
+    entrypoint:
+      - sh
+      - -c
+      - psql "postgresql://cadastro_feliz:cadastro_feliz@postgres:5432/cadastro_feliz" -tAc 'select count(*) from users' && touch /tmp/ready && exec sleep infinity
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 1s
+      retries: 30
+    volumes:
+      - queue-data:/queue
+
+volumes:
+  queue-data:
+
+networks:
+  default:
+    name: cadastro-feliz-net
+    external: true
+YAML
+}
+
 # Sem argumentos roda todos os arquivos; com argumentos, só os nomeados, como em
 # `bash tests/infra/run.sh docs limiter`.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh)
 if [ "$#" -gt 0 ]; then
   FILES=()
   for name in "$@"; do

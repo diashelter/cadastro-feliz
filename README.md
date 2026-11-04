@@ -1,8 +1,10 @@
 # Cadastro Feliz
 
+[![CI](https://github.com/diashelter/cadastro-feliz/actions/workflows/ci.yml/badge.svg)](https://github.com/diashelter/cadastro-feliz/actions/workflows/ci.yml)
+
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. As três stacks ainda estão em design, então os comandos de stack recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -74,7 +76,7 @@ Todas as stacks expõem o mesmo endpoint: `POST /users`, com os campos `name` e 
 
 > Os alvos de stack só funcionam depois que a stack tiver o próprio `docker-compose.yml`. Até lá, `make up-shared` e `make migrate` já sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
 
-O único pré-requisito é Docker com Docker Compose, além do `make`.
+O único pré-requisito é Docker com Docker Compose 2.39 ou mais recente, além do `make`.
 
 Subir os serviços compartilhados, o frontend incluído, e aplicar o schema. `make up-<stack>` não sobe o frontend, então rode `make up-shared` antes:
 
@@ -154,6 +156,12 @@ Limpar os contadores de tentativas, para repetir testes do `429`:
 make reset-limits
 ```
 
+Testar a infraestrutura. Os testes destroem o ambiente `cadastro-feliz-*`, então recusam rodar se ele já existir:
+
+```bash
+make test-infra
+```
+
 ### Endereços
 
 | Serviço | Endereço | Disponível |
@@ -172,6 +180,7 @@ cadastro-feliz/
 ├── Makefile
 ├── .env.example
 ├── docker-compose.yml        # serviços compartilhados
+├── .github/workflows/        # CI: make test-frontend e tests/infra
 ├── database/migrations/      # schema canônico em SQL
 ├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
@@ -190,7 +199,7 @@ cadastro-feliz/
 | [Contrato da API](docs/api-contract.md) | Ordem de processamento, respostas, limite de tentativas e mensagens do frontend |
 | [Banco de dados](docs/database.md) | Schema, migrations, ciclo de status e consultas principais |
 | [Stacks](docs/stacks.md) | Containers, funcionamento do outbox e estrutura de cada stack |
-| [Infraestrutura](docs/infrastructure.md) | Compose, portas, Makefile e variáveis de ambiente |
+| [Infraestrutura](docs/infrastructure.md) | Compose, portas, Makefile, variáveis de ambiente e CI |
 | [Decisões](docs/decisions.md) | Decisões de desenho e seus motivos |
 
 ## Limites conhecidos
