@@ -1,5 +1,7 @@
 # Base da API Laravel
 
+**Approved**: 2026-11-04 - user: "aprovado, pode seguir com as suposições"
+
 ## Problem
 
 `apis/laravel` não existe, e `make up-laravel` recusa com `stack laravel ainda não implementada`.
@@ -224,18 +226,18 @@ A documentação descreve a base que existe, o contrato de `/health` e as duas d
 
 | Assumption | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Versões | `laravel/laravel` `v13.11.0`, `laravel/framework` `v13.40.0`, `php:8.5.12-fpm-alpine`, `nginx:1.30.6-alpine` (série estável), `composer:2.11.1`, phpredis `6.3.0` | as mais recentes no Packagist, no Docker Hub e nas tags do phpredis em 2026-11-04; o Laravel 13 suporta PHP 8.3 a 8.5 | n |
-| Test runner | PHPUnit, o do esqueleto | default 1 do slice `make test-laravel` do design | n |
-| Nome e lugar do módulo | `app/Modules/Health`, com rota em `routes/api.php` | organização modular de docs/stacks.md e da decisão 13 | n |
-| Healthcheck do `php-fpm` | ping do FPM por FastCGI, com o `nginx` dependendo dele saudável | o `nginx` prova o caminho inteiro (Key decision 2 do design); o ping só ordena a subida | n |
-| Porta interna do `nginx` | `80`, publicada como `${API_PORT}:80` | padrão da imagem oficial | n |
-| Alcance do watch | `sync` de `app`, `bootstrap` (sem `cache/`), `config`, `routes` e `tests`; `rebuild` em `composer.json`, `composer.lock` e `docker/php`; o resto entra com `make up-laravel` | é onde as próximas rodadas escrevem; `vendor` e `bootstrap/cache` são gerados na imagem | n |
-| `watch-<stack>` genérico | regra `watch-%` com a mesma recusa de `up-%`, rodando `make up-<stack>` antes de vigiar | uma stack nova entra só com o compose, como as outras regras; `watch-frontend` continua explícito | n |
-| Composer sem `vendor/` na máquina | serviço `composer` no perfil `tools`, com `tmpfs` em `vendor` e `bootstrap/cache` | os scripts do composer rodam `package:discover`, que precisa de `vendor/` e grava em `bootstrap/cache`; em memória, nada fica na máquina | n |
-| Pacote de exemplo dos critérios 27 e 30 | `webmozart/assert:1.11.0` | pacote pequeno em PHP puro; se já estiver em `composer.lock`, o build troca por outro ausente e ajusta os critérios no mesmo commit | n |
-| `APP_DEBUG` | `true` | ambiente local; o corpo de `/health` não depende dele | n |
-| Limites de tempo nos testes | 10 s para uma edição e 180 s para um rebuild com o watch | 10 s como no frontend; 180 s porque a imagem compila o phpredis quando a camada não está em cache | n |
-| Números e origem das decisões | `19` e `20`, origem `Definida` | 18 é a última em `docs/decisions.md`; o responsável escolheu o `/health` comum e a cópia do código na sessão de design | n |
+| Versões | `laravel/laravel` `v13.11.0`, `laravel/framework` `v13.40.0`, `php:8.5.12-fpm-alpine`, `nginx:1.30.6-alpine` (série estável), `composer:2.11.1`, phpredis `6.3.0` | as mais recentes no Packagist, no Docker Hub e nas tags do phpredis em 2026-11-04; o Laravel 13 suporta PHP 8.3 a 8.5 | y |
+| Test runner | PHPUnit, o do esqueleto | default 1 do slice `make test-laravel` do design | y |
+| Nome e lugar do módulo | `app/Modules/Health`, com rota em `routes/api.php` | organização modular de docs/stacks.md e da decisão 13 | y |
+| Healthcheck do `php-fpm` | ping do FPM por FastCGI, com o `nginx` dependendo dele saudável | o `nginx` prova o caminho inteiro (Key decision 2 do design); o ping só ordena a subida | y |
+| Porta interna do `nginx` | `80`, publicada como `${API_PORT}:80` | padrão da imagem oficial | y |
+| Alcance do watch | `sync` de `app`, `bootstrap` (sem `cache/`), `config`, `routes` e `tests`; `rebuild` em `composer.json`, `composer.lock` e `docker/php`; o resto entra com `make up-laravel` | é onde as próximas rodadas escrevem; `vendor` e `bootstrap/cache` são gerados na imagem | y |
+| `watch-<stack>` genérico | regra `watch-%` com a mesma recusa de `up-%`, rodando `make up-<stack>` antes de vigiar | uma stack nova entra só com o compose, como as outras regras; `watch-frontend` continua explícito | y |
+| Composer sem `vendor/` na máquina | serviço `composer` no perfil `tools`, com `tmpfs` em `vendor` e `bootstrap/cache` | os scripts do composer rodam `package:discover`, que precisa de `vendor/` e grava em `bootstrap/cache`; em memória, nada fica na máquina | y |
+| Pacote de exemplo dos critérios 27 e 30 | `webmozart/assert:1.11.0` | pacote pequeno em PHP puro; se já estiver em `composer.lock`, o build troca por outro ausente e ajusta os critérios no mesmo commit | y |
+| `APP_DEBUG` | `true` | ambiente local; o corpo de `/health` não depende dele | y |
+| Limites de tempo nos testes | 10 s para uma edição e 180 s para um rebuild com o watch | 10 s como no frontend; 180 s porque a imagem compila o phpredis quando a camada não está em cache | y |
+| Números e origem das decisões | `19` e `20`, origem `Definida` | 18 é a última em `docs/decisions.md`; o responsável escolheu o `/health` comum e a cópia do código na sessão de design | y |
 
 **Open questions:** none - all resolved or logged above.
 
