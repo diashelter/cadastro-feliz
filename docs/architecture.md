@@ -134,21 +134,22 @@ Republicar uma mensagem perdida não conta como tentativa, porque nenhum envio f
 
 Como o banco é único e o formato do evento é o mesmo, a stack seguinte assume eventos deixados pela anterior: linhas em `pending` são publicadas de imediato, e linhas em `published` são republicadas depois do tempo limite.
 
-O contador de tentativas também acompanha a troca, pois o `redis-limiter` é compartilhado: um e-mail bloqueado em uma stack continua bloqueado nas outras até a janela expirar. Para repetir testes do 429, use outro e-mail ou `make reset-limits`.
+O contador de tentativas também acompanha a troca, pois o `redis-limiter` é compartilhado: um par IP e e-mail bloqueado em uma stack continua bloqueado nas outras até a janela expirar. Para repetir testes do 429, use outro e-mail ou `make reset-limits`.
 
 ## Cenários para validar a implementação
 
 Estes cenários valem para cada stack e servem de critério de aceite quando o código existir.
 
 1. **Fluxo feliz:** enviar o formulário, receber 201 e ver o e-mail no Mailpit em poucos segundos.
-2. **Limite de tentativas:** repetir o mesmo e-mail e obter 201, 409 quatro vezes e depois 429 com `Retry-After`, sem consultas ao banco no 429.
+2. **Limite de tentativas:** repetir o mesmo e-mail a partir do mesmo IP e obter 201, 409 quatro vezes e depois 429 com `Retry-After`, sem consultas ao banco no 429.
 3. **Validação:** enviar e-mail inválido ou nome vazio e obter 422, sem gravar nada e sem contar tentativa.
 4. **Atomicidade:** forçar um erro no `INSERT` do outbox e confirmar que o usuário também não foi gravado.
 5. **SMTP fora do ar:** parar o Mailpit, cadastrar (201), ver `attempts` subir e religar o Mailpit para o e-mail chegar.
 6. **Troca de stack:** parar o worker, cadastrar, trocar de stack e ver o e-mail sair pela nova stack.
 7. **Stack derrubada:** com nenhuma stack ativa, o frontend mostra a mensagem de serviço indisponível.
 8. **Fila fora do ar:** parar a fila, cadastrar (201), ver o evento em `pending` e religar a fila para o e-mail chegar.
-9. **Limite entre stacks:** atingir o 429 em uma stack, trocar de stack e continuar recebendo 429 com o mesmo e-mail.
+9. **Limite entre stacks:** atingir o 429 em uma stack, trocar de stack e continuar recebendo 429 com o mesmo e-mail e o mesmo IP.
+11. **Limite por IP e e-mail:** atingir o 429 com um e-mail a partir de um IP e cadastrar o mesmo e-mail a partir de outro IP, sem receber 429.
 10. **Contador fora do ar:** parar o `redis-limiter`, cadastrar e obter 500, sem gravar nada no banco.
 
 Em Laravel, o relay roda em um container separado do worker, então o evento do cenário 6 fica em `published`. Em NestJS e Go, o relay está no próprio worker, e o evento fica em `pending`.
