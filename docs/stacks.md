@@ -33,6 +33,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - Remover o prefixo padrão `/api`, para a rota ser `/users`, e incluir essa rota na configuração de CORS.
 - Manter `after_commit` desligado na conexão da fila, para o `dispatch` acontecer antes do commit do relay, como nas outras stacks.
 - Sempre responder JSON nos erros, mesmo sem o header `Accept: application/json`.
+- Não usar o formato de validação nativo, que traz `(and N more errors)` em `message` e só textos em `errors`. O corpo de erro segue a [forma do contrato](api-contract.md#forma-do-corpo-de-erro).
 - Configurar duas conexões Redis: `default` para a fila e `limiter` para o `redis-limiter`, sem o prefixo automático do Laravel.
 - Confiar só no `nginx` como proxy, para o IP do cliente usado no contador ser o que o `nginx` repassa. Ver [IP do cliente](api-contract.md#ip-do-cliente).
 - Não usar o `RateLimiter` do framework no contador, porque ele grava com chave e formato próprios. O `RegistrationAttemptLimiter` executa o [script do contrato](api-contract.md#operação-no-redis).
@@ -74,7 +75,7 @@ apis/laravel/
 
 **Pontos de atenção**
 - O `ValidationPipe` retorna 400 por padrão. É preciso configurá-lo para 422.
-- Um filtro de exceções global deve produzir o formato de erro do contrato, inclusive para JSON malformado.
+- Um filtro de exceções global deve produzir a [forma de erro do contrato](api-contract.md#forma-do-corpo-de-erro), com o `code` de cada erro de campo, inclusive para JSON malformado.
 - A `api` só conecta ao `redis-limiter`, e o `worker` só conecta ao `redis`. Nos workers, o BullMQ precisa de `maxRetriesPerRequest: null`, para esperar o Redis voltar. Na conexão do contador, o oposto: a falha precisa ser rápida, para a API responder 500 sem segurar a requisição.
 
 ```txt
@@ -115,6 +116,7 @@ A stack Go não tem Redis próprio. A `api` só usa o `redis-limiter` para o con
 
 **Pontos de atenção**
 - **Encerramento:** o `worker` precisa tratar o sinal de parada e concluir o job atual antes de sair.
+- **Erros sem campo:** inicializar `errors` como lista vazia, porque uma lista nula sairia como `null` no JSON e quebraria a [forma do contrato](api-contract.md#forma-do-corpo-de-erro).
 
 ```txt
 apis/golang/
