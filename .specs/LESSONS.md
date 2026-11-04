@@ -38,6 +38,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: C24 tests/infra/shared.sh t_c24_status (infra)
 - last seen: 2026-11-04T16:42:36Z
 
+### L-005 - An order check over a doc section must match only the command lines, not prose that names the same command.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: frontend-container
+- evidence: C26 tests/infra/docs.sh t_fe26_readme (infra)
+- last seen: 2026-11-04T18:38:23Z
+
+### L-006 - A claim that a container runs as the caller's uid must be proven by a non-root caller, since root owns everything it touches.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: frontend-container
+- evidence: C18 tests/infra/frontend.sh t_fe18_npm_exact (infra)
+- last seen: 2026-11-04T18:38:23Z
+
+### L-007 - A claim about one section of a JSON file must read that section, not grep the whole file.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: frontend-container
+- evidence: C18 tests/infra/frontend.sh t_fe18_npm_exact (infra)
+- last seen: 2026-11-04T18:38:24Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

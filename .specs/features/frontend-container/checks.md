@@ -138,7 +138,7 @@ Proof: run infra | PASS FE28 help lists frontend targets
 ## Handoff
 
 - **Settled mid-build:** user: "pode seguir com a verificação"
-- **Dispatched:** Verifier at `163b45b` (no screens sub-agent: no criterion cites a capture)
-- **Boundary:** C1-C28 closed at `163b45b` (código em `043e77d`, correção de C2, C3 e C4 em `163b45b`)
+- **Dispatched:** Verifier at `163b45b`, returned (no screens sub-agent: no criterion cites a capture)
+- **Boundary:** C1-C28 closed at `163b45b` (código em `043e77d`, correção de C2, C3 e C4 em `163b45b`); testes de C18 e C26 apertados em `f1f0c42`, provas verdes em `dd6620f`
 - **Abandoned:** encaminhador TCP do Docker para o proxy da sessão - recusado pelo ambiente. `build: ./frontend` sem `provenance: false` - a atestação de proveniência leva a data do build e muda o ID da imagem a cada `up --build` sem mudança (C2 e C4 falharam). Título em `layout.tsx` - o `<title>` continuava `Cadastro Feliz` depois de editar a página (C3 falhou); o título está no `page.tsx`
 - **Ambiente de prova:** os containers desta sessão não têm rede de saída. A tag local `node:26.13.0-alpine` foi sobreposta, só neste Docker, por uma imagem construída da oficial com o cache do npm preenchido (lock do frontend, `is-number` 6 e 7, `is-odd`) e `NPM_CONFIG_OFFLINE=true`. O repositório não sabe disso: numa máquina com rede, o mesmo Dockerfile parte da imagem oficial e o npm usa o registro. O tempo de 2 s no Mac do responsável não foi medido aqui (Out of scope do plano)
