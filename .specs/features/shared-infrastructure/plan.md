@@ -1,6 +1,6 @@
 # Infraestrutura dos serviços comuns
 
-**Approved**:
+**Approved**: 2026-11-04 - user: "aprovado, pode seguir com as sugestões"
 
 ## Problem
 
@@ -198,16 +198,16 @@ A documentação descreve o que existe e registra a ferramenta de migrations.
 
 | Assumption | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Número da decisão do golang-migrate | `15` | o design reservou 14, mas a decisão 14 já foi usada pela forma única de erro; `.design/registration-ip-limit.md` reservou 15 e passa a usar o próximo livre quando for aplicado | n |
-| Porta do PostgreSQL | fixa em 5432, sem variável | é o que `docs/infrastructure.md` diz (default do design) | n |
-| `.env.example` | um único arquivo na raiz com todas as variáveis, inclusive as de stack, lido também pelos composes das stacks | default do design | n |
-| `make down` remove a rede | sim | nada mais a usa (default do design) | n |
-| Nome do alvo que sobe só os comuns | `up-shared`, com `logs-shared` por simetria | default do design | n |
-| Reconstrução de imagens em `up-<stack>` | só quando o Compose detecta mudança (`up --build` não é forçado) | default do design | n |
-| Tag exata das imagens | `postgres:18.6-alpine`, `redis:8.10.3-alpine`, `axllent/mailpit:v1.33.0`, `migrate/migrate:v4.20.1` | mais recentes disponíveis em 2026-11-04 nas versões maiores do design; variante `alpine` por ser menor | n |
-| Nome de stack desconhecido | recusa com `stack <x> desconhecida` | o design só trata stack conhecida sem compose; a regra genérica `up-%` aceitaria qualquer nome | n |
-| Testes da infraestrutura | scripts bash em `tests/infra/`, rodados por `make test-infra`, contra o Docker local; destroem o ambiente `cadastro-feliz-*` e recusam rodar se ele já existe | não há test runner no repositório e o que se prova é o comportamento do Docker e do `make` | n |
-| Healthchecks | `pg_isready -U $DB_USERNAME -d $DB_DATABASE`, `redis-cli ping`, e o `readyz` embutido na imagem do Mailpit | comando de prontidão de cada imagem, como o design pede | n |
+| Número da decisão do golang-migrate | `15` | o design reservou 14, mas a decisão 14 já foi usada pela forma única de erro; `.design/registration-ip-limit.md` reservou 15 e passa a usar o próximo livre quando for aplicado | y |
+| Porta do PostgreSQL | fixa em 5432, sem variável | é o que `docs/infrastructure.md` diz (default do design) | y |
+| `.env.example` | um único arquivo na raiz com todas as variáveis, inclusive as de stack, lido também pelos composes das stacks | default do design | y |
+| `make down` remove a rede | sim | nada mais a usa (default do design) | y |
+| Nome do alvo que sobe só os comuns | `up-shared`, com `logs-shared` por simetria | default do design | y |
+| Reconstrução de imagens em `up-<stack>` | só quando o Compose detecta mudança (`up --build` não é forçado) | default do design | y |
+| Tag exata das imagens | `postgres:18.6-alpine`, `redis:8.10.3-alpine`, `axllent/mailpit:v1.33.0`, `migrate/migrate:v4.20.1` | mais recentes disponíveis em 2026-11-04 nas versões maiores do design; variante `alpine` por ser menor | y |
+| Nome de stack desconhecido | recusa com `stack <x> desconhecida` | o design só trata stack conhecida sem compose; a regra genérica `up-%` aceitaria qualquer nome | y |
+| Testes da infraestrutura | scripts bash em `tests/infra/`, rodados por `make test-infra`, contra o Docker local; destroem o ambiente `cadastro-feliz-*` e recusam rodar se ele já existe | não há test runner no repositório e o que se prova é o comportamento do Docker e do `make` | y |
+| Healthchecks | `pg_isready -U $DB_USERNAME -d $DB_DATABASE`, `redis-cli ping`, e o `readyz` embutido na imagem do Mailpit | comando de prontidão de cada imagem, como o design pede | y |
 
 **Open questions:** none - all resolved or logged above.
 
