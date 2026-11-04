@@ -89,7 +89,18 @@ shared_healthy() {
   done
 }
 
-for f in docs.sh shared.sh migrate.sh stack.sh frontend.sh; do
+# Sem argumentos roda todos os arquivos; com argumentos, só os nomeados, como em
+# `bash tests/infra/run.sh docs limiter`.
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh)
+if [ "$#" -gt 0 ]; then
+  FILES=()
+  for name in "$@"; do
+    [ -f "$TESTS/$name.sh" ] || { echo "arquivo de teste desconhecido: $name" >&2; exit 1; }
+    FILES+=("$name.sh")
+  done
+fi
+
+for f in "${FILES[@]}"; do
   [ -f "$TESTS/$f" ] || continue
   new_workdir
   destroy_environment

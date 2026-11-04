@@ -22,6 +22,7 @@
 | [14](#14-forma-única-das-respostas-de-erro) | Forma única das respostas de erro | Definida |
 | [15](#15-golang-migrate-como-ferramenta-de-migrations) | golang-migrate como ferramenta de migrations | Proposta |
 | [16](#16-frontend-em-next-dev-com-o-código-copiado-pelo-compose-watch) | Frontend em `next dev` com o código copiado pelo Compose Watch | Definida |
+| [17](#17-cota-de-cadastros-concluídos-por-ip) | Cota de cadastros concluídos por IP | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -165,3 +166,22 @@ O container do `frontend` roda sempre `next dev`, e o código entra na imagem po
 **Custos**
 - Editar com recarga automática exige um terminal com `make watch-frontend` aberto.
 - O container não se parece com produção, e a primeira página de cada container novo demora alguns segundos para compilar.
+
+## 17. Cota de cadastros concluídos por IP
+
+Cada IP pode concluir no máximo `REGISTRATION_MAX_PER_IP` (20) cadastros a cada `REGISTRATION_IP_WINDOW_SECONDS` (1 hora), em janela fixa no `redis-limiter`. A API reserva uma unidade da cota antes da transação, numa operação atômica, e devolve a reserva quando a resposta é 409 ou 500. Só o 201 consome a cota. A chave, os dois scripts e a posição na ordem de processamento estão em [api-contract.md](api-contract.md#limite-por-ip). O detalhamento está no [design](../.design/registration-ip-limit.md).
+
+**Motivos**
+- **O dano é o e-mail:** cada 201 grava um evento que vira um e-mail para o endereço informado. Sem a cota, um único IP poderia fazer o sistema enviar e-mails para milhares de endereços alheios.
+- **Paralelismo:** verificar e reservar na mesma operação garante o limite mesmo com requisições simultâneas.
+- **409 não pune:** quem erra o próprio e-mail ou tenta de novo não perde cota.
+
+**Alternativas descartadas**
+- **Consultar antes e incrementar depois do commit:** N requisições paralelas passariam juntas.
+- **Contar no PostgreSQL, com o IP em `users`:** sobreviveria a uma perda do `redis-limiter`, mas gravaria o IP junto de dados pessoais e carregaria o banco (decisão 5).
+- **Limite por faixa de IP (/24, /64):** cada stack teria de calcular a faixa do mesmo jeito.
+
+**Custos**
+- Pessoas atrás do mesmo IP dividem a cota.
+- Uma devolução que falha deixa a cota com uma unidade a mais até a janela expirar.
+- As três stacks mantêm cópias de mais dois scripts Lua.

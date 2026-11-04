@@ -35,7 +35,7 @@ Proof: run infra | PASS C7 pinned images
 Proof: run infra | PASS C8 up-shared fails on taken port 8025
 Proof: run infra | PASS C8 up-shared fails on taken port 5432
 
-**C9** - `.env.example` tem as 22 variáveis de `docs/infrastructure.md` › Variáveis de ambiente, cada uma com o padrão da tabela (AC 9)
+**C9** - `.env.example` tem as 24 variáveis de `docs/infrastructure.md` › Variáveis de ambiente, cada uma com o padrão da tabela (AC 9)
 Proof: run infra | PASS C9 env example matches docs
 
 ### S2 - Schema aplicado pelo migrate
@@ -114,7 +114,7 @@ Proof: run infra | PASS C28 database docs name the tool
 | portas só na rede (2) | `redis-limiter:6379` C5 · `mailpit:1025` C5 | - |
 | porta ocupada, AC 8 (2) | `8025` C8 · `5432` C8 | - |
 | configuração do `redis-limiter` (4) | `maxmemory` C6 · `maxmemory-policy` C6 · `save` C6 · `appendonly` C6 | - |
-| variáveis de ambiente (22) | C9, table-driven over all 22 parsed from `docs/infrastructure.md` | - |
+| variáveis de ambiente (24) | C9, table-driven over all 24 parsed from `docs/infrastructure.md` | - |
 | objetos do schema (8) | `users_email_unique` C11 · `users_email_lowercase` C11 · `users_outbox_status_valid` C11 · `users_outbox_attempts_positive` C11 · FK `user_id` C11 · `users_outbox_user_id_index` C11 · `users_outbox_pending_index` C11 · `users_outbox_published_index` C11 | - |
 | entidades (3) | `users` C11 · `users_outbox` C11 · `schema_migrations` C11, C14 | - |
 | recusa de stack sem compose (9) | C16, table-driven over all 9 (`up`/`down`/`logs` × `laravel`/`nest`/`go`) | - |
