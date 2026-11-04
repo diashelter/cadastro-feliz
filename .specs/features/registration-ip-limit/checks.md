@@ -92,7 +92,7 @@ Proof: run infra | PASS IP17 frontend 429 text is generic
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
+- **Dispatched:** Verifier at `505d470` - returned
 - **Boundary:** C1-C17 closed at `f50dbdf`
 - **Abandoned:** none
 - **Environment:** Docker sem acesso ao Docker Hub (429) nem ao npm de dentro dos containers; as imagens vieram de `mirror.gcr.io` e foram marcadas com as tags oficiais. As provas desta feature não constroem a imagem do frontend, por isso o `Run infra` roda só `docs` e `limiter`; o C9 de shared-infrastructure, que muda para 24 variáveis, roda em `make test-infra` completo
