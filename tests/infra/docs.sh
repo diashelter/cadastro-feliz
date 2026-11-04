@@ -302,7 +302,8 @@ t_rf27_docs() {
   body="$(section "$WORK/docs/stacks.md" 'Frontend$')"
   grep -qF 'só o esqueleto' <<< "$body" && { note "stacks.md › Frontend ainda diz que só existe o esqueleto"; ok=1; }
   grep -qF 'make test-frontend' <<< "$body" || { note "stacks.md › Frontend sem make test-frontend"; ok=1; }
-  section "$WORK/docs/infrastructure.md" 'Makefile$' | grep -qF '`make test-frontend`' \
+  # Sem pipe para o grep -q: com pipefail, o awk sem leitor (SIGPIPE) faria falhar.
+  grep -qF '`make test-frontend`' <<< "$(section "$WORK/docs/infrastructure.md" 'Makefile$')" \
     || { note "infrastructure.md › Makefile sem make test-frontend"; ok=1; }
   sentences "$WORK/README.md" | grep -iF 'frontend' | grep -qF 'esqueleto' \
     && { note "README ainda descreve o frontend como esqueleto"; ok=1; }
@@ -311,3 +312,110 @@ t_rf27_docs() {
   return $ok
 }
 check "RF27 docs describe the form and test-frontend" t_rf27_docs
+
+# Base da API Laravel (.specs/features/laravel-api-base) - S5 e o CI.
+
+t_lv35_decision() {
+  local f="$WORK/docs/decisions.md" body term
+  grep -qE '^\| \[19\]\(#19-[^)]*\) \| `GET /health` comum às três stacks \| Definida \|$' "$f" \
+    || { note "índice sem a decisão 19 Definida"; return 1; }
+  body="$(section "$f" '19\. `GET /health` comum às três stacks$')"
+  [ -n "$body" ] || { note "seção 19 ausente"; return 1; }
+  for term in '`200`' '`503`' '`database`' '`limiter`' '3 s'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 19 sem '$term'"; return 1; }
+  done
+}
+check "LV35 decision 19 recorded" t_lv35_decision
+
+t_lv36_decision() {
+  local f="$WORK/docs/decisions.md" body term
+  grep -qE '^\| \[20\]\(#20-[^)]*\) \| Código da stack Laravel copiado pelo Compose Watch \| Definida \|$' "$f" \
+    || { note "índice sem a decisão 20 Definida"; return 1; }
+  body="$(section "$f" '20\. Código da stack Laravel copiado pelo Compose Watch$')"
+  [ -n "$body" ] || { note "seção 20 ausente"; return 1; }
+  for term in 'bind mount' 'vendor/' 'make watch-laravel' 'make laravel-composer'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 20 sem '$term'"; return 1; }
+  done
+}
+check "LV36 decision 20 recorded" t_lv36_decision
+
+t_lv37_contract_health() {
+  local body status term ok=0
+  body="$(section "$CONTRACT_DOC" '`GET /health`$')"
+  [ -n "$body" ] || { note "api-contract.md sem a seção GET /health"; return 1; }
+  for term in '{"status":"ok","checks":{"database":"ok","limiter":"ok"}}' \
+    '{"status":"fail","checks":{"database":"ok","limiter":"fail"}}' '`503`' 'Cache-Control: no-store' '3 s'; do
+    grep -qF -- "$term" <<< "$body" || { note "seção GET /health sem '$term'"; ok=1; }
+  done
+  status="$(grep -m1 -F '> **Status:**' "$CONTRACT_DOC")"
+  grep -qF 'Laravel' <<< "$status" && grep -qF 'GET /health' <<< "$status" \
+    || { note "status do contrato não cita a Laravel com GET /health"; ok=1; }
+  return $ok
+}
+check "LV37 contract describes health" t_lv37_contract_health
+
+t_lv38_infrastructure() {
+  local f="$WORK/docs/infrastructure.md" make_section versions ci stack_vars compose_row term ok=0
+  make_section="$(section "$f" 'Makefile$')"
+  for term in 'make watch-laravel' 'make laravel-composer' 'make test-laravel'; do
+    grep -qF "\`$term" <<< "$make_section" || { note "Makefile sem $term"; ok=1; }
+  done
+  grep -F '| `make up-laravel` |' <<< "$make_section" | grep -qF 'reconstru' \
+    || { note "linha do make up-laravel não diz que reconstrói"; ok=1; }
+  versions="$(awk '/^### Versões fixadas/{on=1; next} on && /^##/{exit} on' "$f")"
+  for term in nginx:1.30.6-alpine php:8.5.12-fpm-alpine composer:2.11.1; do
+    grep -qF "$term" <<< "$versions" || { note "Versões fixadas sem $term"; ok=1; }
+  done
+  compose_row="$(grep -F '| `apis/laravel/docker-compose.yml` |' "$f")"
+  grep -qF '`nginx`' <<< "$compose_row" && grep -qF '`php-fpm`' <<< "$compose_row" \
+    || { note "linha do compose da Laravel: $compose_row"; ok=1; }
+  ci="$(section "$f" 'Integração contínua$')"
+  grep -qF 'make test-laravel' <<< "$ci" || { note "Integração contínua sem make test-laravel"; ok=1; }
+  stack_vars="$(awk '/^### Específicas de stack/{on=1; next} on && /^##/{exit} on' "$f")"
+  for term in APP_KEY APP_ENV APP_DEBUG; do
+    grep -qE "^\| \`$term\` \|" <<< "$stack_vars" || { note "Específicas de stack sem $term"; ok=1; }
+  done
+  return $ok
+}
+check "LV38 infrastructure docs describe laravel" t_lv38_infrastructure
+
+t_lv39_readme() {
+  local f="$WORK/README.md" hits body addresses ok=0
+  hits="$(sentences "$f" | grep -F 'três stacks' | grep -F 'em design')"
+  [ -z "$hits" ] || { note "README diz que as três stacks estão em design: $hits"; ok=1; }
+  body="$(section "$f" 'Como vai funcionar$')"
+  grep -qx 'make watch-laravel' <<< "$body" || { note "Como vai funcionar sem make watch-laravel"; ok=1; }
+  grep -qE '^make laravel-composer ARGS=' <<< "$body" || { note "Como vai funcionar sem make laravel-composer"; ok=1; }
+  grep -qx 'make test-laravel' <<< "$body" || { note "Como vai funcionar sem make test-laravel"; ok=1; }
+  addresses="$(subsection "$f" 'Endereços$')"
+  grep -qF 'http://localhost:8080/health' <<< "$addresses" || { note "Endereços sem /health"; ok=1; }
+  return $ok
+}
+check "LV39 readme describes laravel base" t_lv39_readme
+
+t_lv40_stacks() {
+  local body row service term ok=0
+  body="$(section "$WORK/docs/stacks.md" 'Laravel$')"
+  for service in nginx php-fpm; do
+    row="$(grep -E "^\| \`$service\` \|" <<< "$body" | head -1)"
+    grep -qF 'Existe' <<< "$row" || { note "linha de $service: $row"; ok=1; }
+  done
+  for service in scheduler horizon redis; do
+    row="$(grep -E "^\| \`$service\` \|" <<< "$body" | head -1)"
+    grep -qF 'Chega com o outbox' <<< "$row" || { note "linha de $service: $row"; ok=1; }
+  done
+  for term in 'GET /health' 'make watch-laravel' 'make laravel-composer'; do
+    grep -qF "$term" <<< "$body" || { note "stacks.md › Laravel sem '$term'"; ok=1; }
+  done
+  return $ok
+}
+check "LV40 stacks docs describe laravel base" t_lv40_stacks
+
+t_lv41_help() {
+  local out term
+  out="$(make --no-print-directory -C "$WORK" help)"
+  for term in 'make watch-<stack>' 'make laravel-composer' 'make test-laravel'; do
+    grep -qF "$term" <<< "$out" || { note "make help sem $term"; return 1; }
+  done
+}
+check "LV41 help lists laravel targets" t_lv41_help

@@ -3,8 +3,9 @@
 
 t_c16_missing_stack() {
   local target stack out rc ok=0
-  for target in up down logs; do
-    for stack in laravel nest go; do
+  # A Laravel tem compose desde a base da API (.specs/features/laravel-api-base).
+  for target in up down logs watch; do
+    for stack in nest go; do
       out="$(timeout 20 make --no-print-directory -C "$WORK" "$target-$stack" 2>&1)"
       rc=$?
       if [ "$rc" -eq 0 ] || ! grep -qF "stack $stack ainda não implementada" <<< "$out"; then
