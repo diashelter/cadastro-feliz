@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 8,
+  "next_id": 15,
   "lessons": [
     {
       "id": "L-001",
@@ -130,6 +130,132 @@
       ],
       "created": "2026-11-04T18:38:24Z",
       "last_seen": "2026-11-04T18:38:24Z"
+    },
+    {
+      "id": "L-008",
+      "key": "weak_test::a claim that a ttl is kept not renewed is proven by setting an arbitrary ttl first a range up to the full window also accepts a renewed one",
+      "text": "A claim that a TTL is kept, not renewed, is proven by setting an arbitrary TTL first; a range up to the full window also accepts a renewed one.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C7 tests/infra/limiter.sh t_ip7_release (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-009",
+      "key": "weak_test::a script that takes its limit as an argument must be run with a second limit or a hard coded limit passes",
+      "text": "A script that takes its limit as an argument must be run with a second limit, or a hard-coded limit passes.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C5 tests/infra/limiter.sh t_ip5_reserve_limit (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-010",
+      "key": "weak_test::a doc claim that ties a value to a row is proven on that row not by grepping the whole section where the value also appears elsewhere",
+      "text": "A doc claim that ties a value to a row is proven on that row, not by grepping the whole section where the value also appears elsewhere.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C1 tests/infra/docs.sh t_ip1_quota (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-011",
+      "key": "weak_test::a doc check for a scenario asserts its outcome phrases not just the numbers it mentions",
+      "text": "A doc check for a scenario asserts its outcome phrases, not just the numbers it mentions.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C14 tests/infra/docs.sh t_ip14_scenarios (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-012",
+      "key": "weak_test::a doc check scoped to a section must read that section with its subsections not a neighbouring one that happens to hold the phrase",
+      "text": "A doc check scoped to a section must read that section with its subsections, not a neighbouring one that happens to hold the phrase.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C4 tests/infra/docs.sh t_ip4_responses (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-013",
+      "key": "ac_gap::redis ttl rounds to 0 in a key s last half second a value meant for retry after needs a floor of 1",
+      "text": "Redis TTL rounds to 0 in a key's last half second; a value meant for Retry-After needs a floor of 1.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AC 5, AC 10 docs/api-contract.md Scripts da cota (infra)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
+    },
+    {
+      "id": "L-014",
+      "key": "spec_precision_gap::when a plan names the section a test reads from name the section the doc will actually create",
+      "text": "When a plan names the section a test reads from, name the section the doc will actually create.",
+      "signal": "spec_precision_gap",
+      "scope": "docs",
+      "status": "candidate",
+      "features": [
+        "registration-ip-limit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "plan.md Shape step 1 (docs)"
+      ],
+      "created": "2026-11-04T19:44:43Z",
+      "last_seen": "2026-11-04T19:44:43Z"
     }
   ]
 }
