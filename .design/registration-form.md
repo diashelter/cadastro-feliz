@@ -26,7 +26,7 @@ O formulário vem antes das stacks porque não depende de nenhuma delas: o contr
 
 ## Boundary
 
-In: o formulário em `/`, no lugar do esqueleto; a leitura de toda resposta de `POST /users`; o alvo `make test-frontend`, com o test runner e a checagem de tipos; os ajustes em docs/api-contract.md › Comportamento do frontend (texto do 429, regra dos minutos, `Retry-After` ausente, campo desconhecido); docs/stacks.md › Frontend; o README (status e `make test-frontend`); a tabela do Makefile em docs/infrastructure.md; e a decisão 17 em docs/decisions.md.
+In: o formulário em `/`, no lugar do esqueleto; a leitura de toda resposta de `POST /users`; o alvo `make test-frontend`, com o test runner e a checagem de tipos; os ajustes em docs/api-contract.md › Comportamento do frontend (texto do 429, regra dos minutos, `Retry-After` ausente, campo desconhecido); docs/stacks.md › Frontend; o README (status e `make test-frontend`); a tabela do Makefile em docs/infrastructure.md; e a decisão 18 em docs/decisions.md.
 
 Out:
 - Validação no navegador: o formulário existe para exercitar a API (Key decision 2).
@@ -52,7 +52,7 @@ Um teste de ponta a ponta, com navegador real e uma API simulada em container, s
 ## Key decisions
 
 1. **O navegador chama a API direto, a partir de um componente de cliente; nenhuma Server Action ou rota do Next.js fica no meio.** Isso mantém a decisão 12 de docs/decisions.md, e só assim o formulário distingue falha de rede de erro da API. Não copie o padrão de Server Action dos exemplos do Next.js.
-2. **O formulário não valida nada no navegador: envia o que foi digitado, sem `trim`, e todo erro de campo exibido vem da API.** Um formulário em branco gera um 422 da API, e assim o cenário 3 de docs/architecture.md pode ser reproduzido pelo formulário. O schema do módulo `registration` valida a forma da resposta, não a entrada. Registrada como decisão 17 em docs/decisions.md.
+2. **O formulário não valida nada no navegador: envia o que foi digitado, sem `trim`, e todo erro de campo exibido vem da API.** Um formulário em branco gera um 422 da API, e assim o cenário 3 de docs/architecture.md pode ser reproduzido pelo formulário. O schema do módulo `registration` valida a forma da resposta, não a entrada. Registrada como decisão 18 em docs/decisions.md.
 3. **O status decide o resultado, e o corpo só é lido nos erros de campo.** Um 201 é sucesso com qualquer corpo, porque o cadastro já foi gravado, e mostrar erro levaria a pessoa a reenviar e receber um 409. Um 409 ou 422 só é interpretado com a forma única e ao menos um item de `name` ou `email`. Fora disso, e para qualquer outro status, aparece o texto do 500.
 4. **Os campos mantêm o que foi digitado depois de qualquer resposta, e só uma requisição sai por vez.** Repetir o cenário 2 (201, 409 quatro vezes, 429) vira cinco cliques no mesmo botão. Um duplo clique não gera um 409 nem gasta uma tentativa. Um novo envio apaga as mensagens anteriores.
 5. **O 429 mostra `Muitas tentativas de cadastro. Tente novamente em {minutos} minutos.` para qualquer limite, com os minutos arredondados para cima a partir do `Retry-After`.** O texto vem de .design/registration-ip-limit.md e vale também para o limite atual por IP + e-mail. Ele substitui o texto de docs/api-contract.md. Sem um `Retry-After` legível, o formulário não inventa um prazo.
