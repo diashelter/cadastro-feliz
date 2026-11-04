@@ -142,7 +142,7 @@ Proof: run infra | PASS RF27 docs describe the form and test-frontend
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
+- **Dispatched:** Verifier at `4d7ea28` (proofs.md do Docker indisponível neste ambiente; evidência de unidade em npm test no host)
 - **Boundary:** C1-C27 built at `12fa415`; C1-C16 green no host (Node 22, `tsc --noEmit` e `vitest run`, 26 testes), C25-C27 green em `bash tests/infra/run.sh docs`, C17 walked; C18-C24 e os leitores FE1/FE3/FE4/FE9/FE14 precisam da imagem do frontend, que não constrói neste ambiente
 - **Abandoned:** `vitest` 5.1.0 - pede `@types/node` ≥ 22 e o projeto fixa 20.19.43; ficou `vitest` 4.1.12, que aceita 20. As dependências entraram pelo npm 11 do host (`npx npm@11`), porque `make frontend-npm` precisa de rede dentro do container e o npm 10 do host falha com `edgesOut`
 - **Environment:** Docker sem rede dentro dos containers: o `npm ci` do Dockerfile falha, então `make test-frontend` e os testes de `tests/infra/frontend.sh` e `tests/infra/test-frontend.sh` não rodam aqui; rodam numa máquina com Docker e acesso ao registro do npm
