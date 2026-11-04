@@ -29,9 +29,9 @@ t_rf23_exact() {
   for dep in vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @testing-library/user-event; do
     version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("devDependencies", {}).get(sys.argv[2], ""))' "$f" "$dep")"
     [ -n "$version" ] || { note "$dep fora de devDependencies"; ok=1; continue; }
-    case "$version" in
-      '^'*|'~'*) note "$dep com faixa $version"; ok=1 ;;
-    esac
+    # Versão exata: major.minor.patch, com pré-release opcional; nada de faixa, `*` ou tag.
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+      || { note "$dep sem versão exata: $version"; ok=1; }
   done
   return $ok
 }

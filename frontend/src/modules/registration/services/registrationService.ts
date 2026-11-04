@@ -43,9 +43,11 @@ function usersUrl(): string {
 // 429: minutos arredondados para cima a partir do Retry-After, no mínimo 1.
 function tooManyAttempts(retryAfter: string | null): RegistrationResult {
   if (retryAfter === null || !/^[0-9]+$/.test(retryAfter)) return message(TEXTS.tooManyLater);
-  const minutes = Math.max(1, Math.ceil(Number(retryAfter) / 60));
-  const unit = minutes === 1 ? "minuto" : "minutos";
-  return message(`Muitas tentativas de cadastro. Tente novamente em ${minutes} ${unit}.`);
+  // BigInt: um Retry-After enorme não vira notação exponencial nem perde dígitos.
+  const ceiled = (BigInt(retryAfter) + BigInt(59)) / BigInt(60);
+  const minutes = ceiled < BigInt(1) ? BigInt(1) : ceiled;
+  const unit = minutes === BigInt(1) ? "minuto" : "minutos";
+  return message(`Muitas tentativas de cadastro. Tente novamente em ${minutes.toString()} ${unit}.`);
 }
 
 // 409 e 422: o texto do primeiro item de cada campo; fora da forma única, ou sem
@@ -63,7 +65,10 @@ async function fieldErrors(response: Response): Promise<RegistrationResult> {
   const fields: Partial<Record<RegistrationField, string>> = {};
   for (const field of FIELDS) {
     const first = parsed.errors.find((item) => item.field === field);
-    if (first) fields[field] = FIELD_TEXTS[field][first.code] ?? TEXTS.unknownCode;
+    if (!first) continue;
+    // Só chaves próprias: um `code` como `constructor` ou `__proto__` não é um texto.
+    const texts = FIELD_TEXTS[field];
+    fields[field] = Object.hasOwn(texts, first.code) ? texts[first.code] : TEXTS.unknownCode;
   }
   if (Object.keys(fields).length === 0) return message(TEXTS.failure);
   return { kind: "fields", fields };

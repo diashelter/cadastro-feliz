@@ -256,6 +256,11 @@ describe("RegistrationForm", () => {
     const cases: Array<[string, string]> = [
       ["email", "blocked"],
       ["name", "already_taken"],
+      // Nomes do protótipo de Object também são códigos desconhecidos.
+      ["name", "__proto__"],
+      ["email", "constructor"],
+      ["name", "toString"],
+      ["email", "hasOwnProperty"],
     ];
     for (const [field, code] of cases) {
       const { name, email, view } = await submit(
@@ -285,6 +290,18 @@ describe("RegistrationForm", () => {
         }),
       ],
       ["não é json", "não é json"],
+      ["message do corpo não é texto", json({ message: 1, errors: [{ field: "name", code: "required", message: "x" }] })],
+      ["message do item não é texto", json({ message: "x", errors: [{ field: "name", code: "required", message: null }] })],
+      [
+        "field de um item não é texto, ao lado de um item válido",
+        json({
+          message: "x",
+          errors: [
+            { field: "name", code: "required", message: "x" },
+            { field: 1, code: "required", message: "x" },
+          ],
+        }),
+      ],
     ];
     for (const status of [409, 422]) {
       for (const [label, body] of bodies) {
@@ -304,6 +321,10 @@ describe("RegistrationForm", () => {
       ["61", "Muitas tentativas de cadastro. Tente novamente em 2 minutos."],
       ["60", "Muitas tentativas de cadastro. Tente novamente em 1 minuto."],
       ["0", "Muitas tentativas de cadastro. Tente novamente em 1 minuto."],
+      [
+        "99999999999999999999999",
+        "Muitas tentativas de cadastro. Tente novamente em 1666666666666666666667 minutos.",
+      ],
     ];
     for (const [seconds, text] of table) {
       const { view } = await submit(

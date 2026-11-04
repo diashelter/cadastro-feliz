@@ -278,7 +278,7 @@ t_rf25_contract() {
   grep -F '409' <<< "$body" | grep -F '422' | grep -F '`name`' | grep -F '`email`' | grep -qF '500' \
     || { note "sem 409 ou 422 sem item de name ou email -> texto do 500"; ok=1; }
   grep -F 'arredondad' <<< "$body" | grep -qF 'para cima' || { note "sem a regra dos minutos"; ok=1; }
-  grep -qF '1 minuto' <<< "$body" || { note "sem '1 minuto' no singular"; ok=1; }
+  grep -qE '(^|[^0-9])1 minuto([^s]|$)' <<< "$body" || { note "sem '1 minuto' no singular"; ok=1; }
   grep -qF 'Muitas tentativas de cadastro. Tente novamente mais tarde.' <<< "$body" \
     || { note "sem o texto do 429 sem Retry-After"; ok=1; }
   return $ok
