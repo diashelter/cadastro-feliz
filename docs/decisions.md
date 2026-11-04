@@ -19,6 +19,7 @@
 | [11](#11-mailpit-como-caixa-de-e-mail) | Mailpit como caixa de e-mail | Proposta |
 | [12](#12-navegador-chama-a-api-diretamente) | Navegador chama a API diretamente | Proposta |
 | [13](#13-escopo-das-convenções-do-agentsmd) | Escopo das convenções do `AGENTS.md` | Proposta |
+| [14](#14-forma-única-das-respostas-de-erro) | Forma única das respostas de erro | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -106,6 +107,25 @@ O `AGENTS.md` em `~/Documents` descreve outro produto, uma plataforma de eventos
 
 - Documentação em português do Brasil e código em inglês.
 - Organização modular.
-- Formato das respostas JSON e das mensagens de commit.
+- Formato das respostas JSON, com o corpo de erro redefinido pela decisão 14, e das mensagens de commit.
 
 Não se aplicam aqui as regras específicas daquele produto, como a arquitetura de upload, a estrutura de filas de mídia e o prefixo `/api/v1`.
+
+## 14. Forma única das respostas de erro
+
+Todo erro de `POST /users` traz `message` e uma lista `errors`, com `field`, `code` e `message` em cada item. A lista fica vazia quando não há erro de campo. O frontend traduz cada item pelo par `field` + `code`, e a API continua em inglês. O detalhamento está em [api-contract.md](api-contract.md#forma-do-corpo-de-erro) e no [design](../.design/api-error-response.md).
+
+**Motivos**
+- **Uma forma só:** os status de erro tinham corpos diferentes, e cada stack teria de decidir como montá-los.
+- **Tradução sem comparar textos:** o 422 mostra o erro junto de cada campo, e o status não diz qual regra foi violada.
+- **Lista em vez de mapa:** sem erro de campo, um mapa vazio sairia como `[]` em PHP e `null` em Go, se não fosse tratado. Em Go, a lista também precisa ser inicializada.
+
+**Alternativas descartadas**
+- **Mapa por campo:** mantinha o agrupamento do formato anterior, mas exigia tratar o mapa vazio em cada stack.
+- **RFC 9457 (Problem Details):** só compensa com consumidores externos ou ferramentas que esperem o padrão, e hoje há um endpoint e um frontend.
+- **Mensagens da API em português:** simplificaria o frontend, mas colocaria texto de interface nas três stacks.
+
+**Custos**
+- Nenhuma stack aproveita o formato de erro nativo do framework.
+- Os códigos e o par `field` + `code` passam a ser um contrato entre as stacks e o frontend.
+- 404, 405, `Content-Type` errado, corpo que não é objeto e a quantidade de erros por campo ficam sem definição, conforme as [limitações do contrato](api-contract.md#limitações-conhecidas).
