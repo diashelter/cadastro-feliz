@@ -75,8 +75,10 @@ check "C6 redis-limiter config" t_c6_redis_config
 
 t_c25_logs() {
   # O alvo acompanha os logs sem sair; o timeout o encerra.
-  local out
+  local out rc
   out="$(timeout 15 make --no-print-directory -C "$WORK" logs-shared 2>&1)"
+  rc=$?
+  [ "$rc" -eq 124 ] || { note "logs-shared saiu sozinho (rc=$rc), sem acompanhar"; return 1; }
   grep -q 'database system is ready to accept connections' <<< "$out"
 }
 check "C25 logs-shared follows logs" t_c25_logs
@@ -100,8 +102,11 @@ check "C23 reset-limits empties limiter" t_c23_reset_limits
 
 t_c2_keeps_env() {
   sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=outra/' "$WORK/.env"
+  local before="$WORK/.env.before"
+  cp "$WORK/.env" "$before"
   mk up-shared >/dev/null 2>&1 || return 1
-  grep -qx 'DB_PASSWORD=outra' "$WORK/.env"
+  grep -qx 'DB_PASSWORD=outra' "$WORK/.env" || return 1
+  cmp -s "$before" "$WORK/.env" || { note ".env mudou"; return 1; }
 }
 check "C2 up-shared keeps existing env" t_c2_keeps_env
 

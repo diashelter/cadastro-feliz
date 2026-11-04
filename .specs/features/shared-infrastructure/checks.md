@@ -4,7 +4,7 @@ Build: none - o repositório não tem build, lint nem type check; o compose e o 
 Run infra: `make test-infra`
 Plan: `.specs/features/shared-infrastructure/plan.md`
 
-28 checks in 4 slices · 4 one-way doors · 0 open, of which 0 block
+29 checks in 4 slices · 4 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -90,6 +90,9 @@ Proof: run infra | PASS C24 status lists containers
 **C25** - `make logs-shared` mostra `database system is ready to accept connections` (AC 25)
 Proof: run infra | PASS C25 logs-shared follows logs
 
+**C29** - Com a stack `go` no ar, `make status` mostra `cadastro-feliz-go-api-1` e o `postgres` comum, cada um com o estado `running` na linha (AC 24)
+Proof: run infra | PASS C29 status lists stack containers
+
 ### S4 - Documentação alinhada
 
 **C26** - `docs/decisions.md` tem a decisão `15. golang-migrate como ferramenta de migrations`, com origem `Proposta` no índice, `NNNN_<nome>.up.sql`, `BEGIN;`, `COMMIT;`, *dirty* e `force` (AC 26)
@@ -116,7 +119,7 @@ Proof: run infra | PASS C28 database docs name the tool
 | entidades (3) | `users` C11 · `users_outbox` C11 · `schema_migrations` C11, C14 | - |
 | recusa de stack sem compose (9) | C16, table-driven over all 9 (`up`/`down`/`logs` × `laravel`/`nest`/`go`) | - |
 | recusa de stack desconhecida (3) | `up-rails` C17 · `down-rails` C17 · `logs-rails` C17 | - |
-| comandos do Makefile (9) | `up-shared` C1 · `migrate` C11 · `up-<stack>` C18 · `down-<stack>` C21 · `down` C22 · `status` C24 · `logs-shared` C25 · `logs-<stack>` C16 · `reset-limits` C23 · `test-infra` - is the run itself | - |
+| comandos do Makefile (9) | `up-shared` C1 · `migrate` C11 · `up-<stack>` C18 · `down-<stack>` C21 · `down` C22 · `status` C24, C29 · `logs-shared` C25 · `logs-<stack>` C16 · `reset-limits` C23 · `test-infra` - is the run itself | - |
 | ciclo de vida em `make down` (3) | PostgreSQL mantém C22 · contadores descartados C22 · containers removidos C22 | - |
 | ciclo de vida em `make down-<stack>` (3) | fila descartada C21 · contadores mantidos C21 · PostgreSQL mantém C21 | - |
 | door 1: ferramenta de migrations (4) | formato e `BEGIN;`/`COMMIT;` C10 · `schema_migrations` C11 · falha atômica C14 · down C15 | - |
@@ -139,6 +142,6 @@ Proof: run infra | PASS C28 database docs name the tool
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** Verifier at `67153a6` (no screens sub-agent: no criterion cites a capture)
+- **Dispatched:** Verifier at `67153a6`, returned (no screens sub-agent: no criterion cites a capture)
 - **Boundary:** C1-C25 closed at `ccc1cb8`; C26-C28 closed at `96af70a`
 - **Abandoned:** comparar `pg_dump` cru em C12 - o pg_dump 18 sorteia a chave de `\restrict` a cada execução; o teste fixa `--restrict-key`. Grep por linha em C27 - acusava frases corretas ("se ele não existir"); o teste julga por frase

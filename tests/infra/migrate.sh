@@ -53,6 +53,8 @@ check "C12 migrate rerun changes nothing" t_c12_rerun
 t_c13_starts_shared() {
   mkq down || return 1
   any_containers && { note "containers restaram depois de make down"; return 1; }
+  # Sem o volume, a versão 1 só pode vir deste make migrate.
+  docker volume rm "$PG_VOLUME" >/dev/null || return 1
   mk migrate >/dev/null 2>&1 || { note "make migrate saiu com erro"; return 1; }
   shared_healthy || return 1
   [ "$(version_row)" = "1 f" ]

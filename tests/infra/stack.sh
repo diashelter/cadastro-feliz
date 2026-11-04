@@ -86,6 +86,14 @@ t_c19_switch() {
 }
 check "C19 up-stack takes other stacks down" t_c19_switch
 
+t_c29_status_stack() {
+  local out
+  out="$(mk status 2>&1)" || return 1
+  echo "$out" | grep -E 'cadastro-feliz-go-api-1.*running' >/dev/null || { note "status sem a stack go running"; return 1; }
+  echo "$out" | grep -E "$(container postgres).*running" >/dev/null || { note "status sem postgres running"; return 1; }
+}
+check "C29 status lists stack containers" t_c29_status_stack
+
 t_c21_down_stack() {
   psql_q "insert into users (name, email) values ('Ana Souza', 'ana@example.com')" >/dev/null || return 1
   redis_q SET registration:attempts:abc 1 EX 900 >/dev/null || return 1
