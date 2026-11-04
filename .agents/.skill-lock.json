@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "skills": {
+    "tlc-discover": {
+      "name": "tlc-discover",
+      "source": "local",
+      "contentHash": "a2426c1b3b34dcd2b2d241be4d3050e4751d772fd49146e57223b036eeae6076",
+      "installedAt": "2026-11-04T13:34:40.806Z",
+      "updatedAt": "2026-11-04T13:34:40.806Z",
+      "agents": [
+        "claude-code"
+      ],
+      "method": "copy",
+      "global": false
+    },
+    "tlc-spec-lean": {
+      "name": "tlc-spec-lean",
+      "source": "local",
+      "contentHash": "65cf4acff0a88093eafc9d34a36ca3a03a74c78301b1b4025e517ecc18e66a44",
+      "installedAt": "2026-11-04T13:34:40.821Z",
+      "updatedAt": "2026-11-04T13:34:40.821Z",
+      "agents": [
+        "claude-code"
+      ],
+      "method": "copy",
+      "global": false
+    }
+  }
+}
