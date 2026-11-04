@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // A API só expõe GET /health: nada de rotas storage/{path} assinadas
+            // com o APP_KEY local, que é público em .env.example.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

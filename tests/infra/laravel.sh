@@ -66,13 +66,17 @@ t_lv6_framework_locked() {
 check "LV6 framework version locked" t_lv6_framework_locked
 
 t_lv34_ci() {
-  local job ok=0 install_line run_line
+  local job ok=0 install_line sum_line run_line
   job="$(awk '/^  laravel:$/{on=1; print; next} on && /^  [a-z][a-z-]*:$/{exit} on' "$WORK/.github/workflows/ci.yml")"
   [ -n "$job" ] || { note "workflow sem job laravel"; return 1; }
-  install_line="$(grep -n 'Instala o Docker Compose' <<< "$job" | head -1 | cut -d: -f1)"
+  # O Compose fixado: o download de $COMPOSE_VERSION e a conferência com $COMPOSE_SHA256,
+  # as duas antes de make test-laravel.
+  install_line="$(grep -nF 'releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64' <<< "$job" | head -1 | cut -d: -f1)"
+  sum_line="$(grep -nF 'echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -' <<< "$job" | head -1 | cut -d: -f1)"
   run_line="$(grep -nE '^ +run: make test-laravel$' <<< "$job" | head -1 | cut -d: -f1)"
-  [ -n "$install_line" ] && [ -n "$run_line" ] && [ "$install_line" -lt "$run_line" ] \
-    || { note "job laravel: instala o Compose na linha '$install_line', make test-laravel na '$run_line'"; ok=1; }
+  [ -n "$install_line" ] && [ -n "$sum_line" ] && [ -n "$run_line" ] \
+    && [ "$install_line" -lt "$sum_line" ] && [ "$sum_line" -lt "$run_line" ] \
+    || { note "job laravel: download na linha '$install_line', checksum na '$sum_line', make test-laravel na '$run_line'"; ok=1; }
   bash "$WORK/tests/infra/run.sh" --list | grep -qx laravel || { note "run.sh --list sem laravel"; ok=1; }
   return $ok
 }
@@ -179,6 +183,31 @@ t_lv21_json_404() {
   return $ok
 }
 check "LV21 unknown route answers json" t_lv21_json_404
+
+t_lv44_only_health_route() {
+  local uris ok=0 method
+  uris="$(docker exec "$FPM" php artisan route:list --json | jq -c '[.[].uri] | sort')"
+  [ "$uris" = '["health"]' ] || { note "rotas: $uris"; ok=1; }
+  for method in GET PUT; do
+    [ "$(curl -s -o /dev/null --max-time 10 -X "$method" -w '%{http_code}' localhost:8080/storage/x)" = 404 ] \
+      || { note "$method /storage/x não respondeu 404"; ok=1; }
+  done
+  return $ok
+}
+check "LV44 api exposes only health" t_lv44_only_health_route
+
+t_lv45_no_table_defaults() {
+  local got expected='["pgsql","array","array","sync","stderr"]'
+  # Os valores do php-fpm em execução, com as variáveis do container, sem o phpunit.xml.
+  got="$(docker exec -w /var/www/html "$FPM" php -r '
+    require "vendor/autoload.php";
+    $app = require "bootstrap/app.php";
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    echo json_encode([config("database.default"), config("session.driver"), config("cache.default"),
+      config("queue.default"), config("logging.default")]);')"
+  [ "$got" = "$expected" ] || { note "database, session, cache, queue, logging: $got"; return 1; }
+}
+check "LV45 laravel defaults use no table" t_lv45_no_table_defaults
 
 t_lv14_limiter_stopped() {
   local ok=0

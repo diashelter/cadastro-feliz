@@ -5,7 +5,7 @@ Run laravel: `make test-laravel`
 Run infra: `bash tests/infra/run.sh docs stack laravel`
 Plan: `.specs/features/laravel-api-base/plan.md`
 
-43 checks in 5 slices · 6 one-way doors · 0 open, of which 0 block
+45 checks in 5 slices · 6 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -155,11 +155,20 @@ Proof: run infra | PASS LV42 broken lock fails build commands
 **C43** - Um `ARGS` que faz o composer falhar (`require pacote/inexistente`) faz `make laravel-composer` sair com código diferente de zero (Shape › Comandos: o composer falha)
 Proof: run infra | PASS LV43 laravel-composer propagates composer failure
 
+### Acrescentados pelo Verifier
+
+**C44** - A API só tem a rota `health`: `php artisan route:list` no `php-fpm` lista só `health`, e `GET` e `PUT /storage/x` respondem `404` (› Surface: só `GET /health`)
+Proof: run infra | PASS LV44 api exposes only health
+
+**C45** - No `php-fpm` em execução, sem o `phpunit.xml`, os padrões são banco `pgsql`, sessão `array`, cache `array`, fila `sync` e log `stderr` (Landing door 6)
+Proof: run infra | PASS LV45 laravel defaults use no table
+
 ## Coverage
 
 | Set (size) | Member -> proof | Unproven |
 | --- | --- | --- |
-| Landing doors (6) | execução da stack C1 · C4 · C5 · C7 · C14 · fluxo de código e dependências C24 · C25 · C27 · C10 · contrato `GET /health` C13 · C14 · C17 · C20 · C37 · `up-<stack>` reconstrói C3 · dependências novas C5 · C6 · Laravel sem tabelas e sem `.env` C10 · C11 · C13 · C31 | - |
+| Landing doors (7) | execução da stack C1 · C4 · C5 · C7 · C14 · fluxo de código e dependências C24 · C25 · C27 · C10 · contrato `GET /health` C13 · C14 · C17 · C20 · C37 · `up-<stack>` reconstrói C3 · dependências novas C5 · C6 · Laravel sem tabelas e sem `.env` C10 · C11 · C45 · C31 · composer sobre uma cópia C27 · C42 · C43 | - |
+| rotas da API (1) | `GET /health` C44 |
 | `GET /health` statuses (2) | `200` C13 · C22 · `503` C14 · C15 · C16 · C17 · C22 | - |
 | corpo do `503` por combinação de falhas (3) | só `limiter` C14 · só `database` C15 · os dois C16 | - |
 | dependência travada (2) | `redis-limiter` pausado C17 · `postgres` pausado C17 | - |
@@ -192,7 +201,7 @@ Proof: run infra | PASS LV43 laravel-composer propagates composer failure
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** Verifier at `d9c31a9` (no screens sub-agent: no criterion cites a capture)
+- **Dispatched:** Verifier at `d9c31a9`, returned - 4 achados, fechados no mesmo passo (no screens sub-agent: no criterion cites a capture)
 - **Boundary:** C1-C43 closed at `d9c31a9` (código em `6eb4f21`, testes em `9b4be3e`, docs em `d9c31a9`); `check_proofs.py` 48 pass, 0 fail em `d9c31a9`
 - **Abandoned:** `tmpfs` sobre `vendor` no serviço `composer` - o Docker criaria `apis/laravel/vendor` na máquina como ponto de montagem (virou a door 7 do plano). A imagem do `php-fpm` no serviço `composer` - um lock quebrado impediria `make laravel-composer` de consertá-lo. `php artisan test` lendo o `.env` ausente - o Collision mostra como aviso a leitura que o phpdotenv faz com `@`; o Laravel deixa de tentar ler o arquivo quando ele não existe. LV7 com `routes/api.php` ou o `HealthController` quebrados - o `package:discover` do build carrega os dois, então o caso só de execução usa o `LimiterCheck`
 - **Ambiente de prova:** o Docker desta sessão não alcança os espelhos do Alpine, o PECL nem os downloads do GitHub, e o Docker Hub anônimo responde 429. Só neste Docker, e fora do repositório: as imagens comuns vieram de `mirror.gcr.io` com a tag original; a tag `php:8.5.12-fpm-alpine` foi sobreposta por uma imagem construída da oficial com `pdo_pgsql.so`, `redis.so` (6.3.0), `libpq`, `liblz4`, `libfcgi` e `cgi-fcgi` copiados de `serversideup/php:8.5.12-fpm-alpine3.23` (PHP 8.5.12), `apk`, `pecl install redis-6.3.0` e `docker-php-ext-install` trocados por scripts que só copiam esses arquivos, e um cache offline do composer (`COMPOSER_DISABLE_NETWORK=1`) montado a partir dos clones git do lock; a tag `node:26.13.0-alpine` confia no certificado da sessão, para o `npm ci` do frontend no C22 de shared-infrastructure. Numa máquina com rede, o mesmo Dockerfile roda `apk`, `pecl` e `composer install` de verdade: esse caminho não foi exercido aqui, e o CI só o exercita num pull request ou num disparo manual

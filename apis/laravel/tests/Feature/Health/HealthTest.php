@@ -25,6 +25,12 @@ class HealthTest extends TestCase
         });
     }
 
+    private function assertHealthHeaders($response): void
+    {
+        $response->assertHeader('Content-Type', 'application/json');
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
     public function test_returns_ok_when_both_checks_pass(): void
     {
         $this->passing(DatabaseCheck::class);
@@ -34,7 +40,7 @@ class HealthTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertSame('{"status":"ok","checks":{"database":"ok","limiter":"ok"}}', $response->getContent());
-        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        $this->assertHealthHeaders($response);
     }
 
     public function test_returns_503_when_database_fails(): void
@@ -46,7 +52,7 @@ class HealthTest extends TestCase
 
         $response->assertStatus(503);
         $this->assertSame('{"status":"fail","checks":{"database":"fail","limiter":"ok"}}', $response->getContent());
-        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        $this->assertHealthHeaders($response);
     }
 
     public function test_returns_503_when_limiter_fails(): void
@@ -58,6 +64,7 @@ class HealthTest extends TestCase
 
         $response->assertStatus(503);
         $this->assertSame('{"status":"fail","checks":{"database":"ok","limiter":"fail"}}', $response->getContent());
+        $this->assertHealthHeaders($response);
     }
 
     public function test_returns_503_when_both_checks_fail(): void
@@ -69,5 +76,6 @@ class HealthTest extends TestCase
 
         $response->assertStatus(503);
         $this->assertSame('{"status":"fail","checks":{"database":"fail","limiter":"fail"}}', $response->getContent());
+        $this->assertHealthHeaders($response);
     }
 }
