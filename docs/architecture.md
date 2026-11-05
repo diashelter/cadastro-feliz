@@ -1,6 +1,6 @@
 # Arquitetura
 
-> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A API, o relay e o worker descritos aqui ainda não foram implementados em nenhuma stack, então este documento descreve o comportamento planejado para eles.
+> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A stack Laravel responde `POST /users` e envia o e-mail pelo Horizon, por enquanto sem o outbox (decisão 21 de [decisions.md](decisions.md)); o que muda até lá está em [Limitações do fluxo sem outbox](#limitações-do-fluxo-sem-outbox). O relay e o outbox descritos aqui ainda não foram implementados em nenhuma stack, então este documento descreve o comportamento planejado para eles.
 
 ## O problema
 
@@ -96,8 +96,10 @@ O worker aceita eventos em `pending` além de `published`, porque a mensagem pod
 
 O texto é igual nas três stacks:
 
-- **Assunto:** `Seu cadastro foi concluído`
-- **Corpo:** `Olá, {name}! Seu cadastro no Cadastro Feliz foi concluído com sucesso.`
+- **Assunto:** `Boas-vindas ao Cadastro Feliz!`
+- **Corpo:** `Olá, {name}!` / `Que bom ter você por aqui. Seu cadastro no Cadastro Feliz foi concluído com sucesso.` / `Não é preciso fazer mais nada.` / `Um abraço,` / `Equipe Cadastro Feliz`
+
+O e-mail sai em HTML minimalista, sem imagens nem recursos externos, e em texto simples, com o mesmo conteúdo.
 
 ## Retentativas
 
@@ -109,6 +111,17 @@ As retentativas ficam no banco, e não no recurso nativo de cada fila, para que 
 Com os valores padrão (base de 30 segundos e 5 tentativas), as esperas são de 30, 60, 120 e 240 segundos. Reprocessar um evento em `failed` é uma ação manual no banco, descrita em [database.md](database.md#reprocessar-um-evento-em-failed).
 
 Republicar uma mensagem perdida não conta como tentativa, porque nenhum envio falhou.
+
+## Limitações do fluxo sem outbox
+
+Enquanto a stack Laravel não tem o outbox (decisão 21), gravar o usuário e publicar o job são duas escritas sem transação comum, e o e-mail pode se perder com o usuário já gravado. Os três primeiros casos são provados pelos testes de `tests/infra/limitations.sh`, que afirmam o comportamento de hoje e se invertem na rodada do outbox.
+
+| Caso | O que acontece | Cenário que passa a cobrir |
+|---|---|---|
+| Redis da fila parado no cadastro | A API responde `201`, o erro fica só no log e o job nunca existe. Com o Redis de volta, nenhum e-mail sai, e repetir o cadastro responde `409`. | Cenário 8 |
+| `horizon` parado e a stack derrubada | O job só existia no Redis, descartado com a stack. O worker volta sem nada para fazer, e nenhum e-mail sai. | Cenário 6 |
+| SMTP fora até esgotar as tentativas | O job vira uma falha só no Horizon, sem registro no PostgreSQL. Com o SMTP de volta, nenhum e-mail sai. | Cenário 5 |
+| API cai entre gravar e publicar | Mesma consequência do primeiro caso, sem nem o log. Fica só neste registro, porque reproduzi-la exigiria alterar o código. | Cenário 4 |
 
 ## Garantias e limites
 

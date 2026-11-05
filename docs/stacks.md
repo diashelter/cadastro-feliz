@@ -1,6 +1,6 @@
 # Stacks
 
-> **Status:** em construção. A [base da stack Laravel](#laravel) existe, com `nginx`, `php-fpm` e `GET /health`. NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
+> **Status:** em construção. A [stack Laravel](#laravel) existe, com `POST /users`, `GET /health` e o Horizon, por enquanto sem o outbox (decisão 21 de [decisions.md](decisions.md)). NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
 
 ## Visão geral
 
@@ -21,19 +21,21 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 | `nginx` | Publica a API na porta 8080 e encaminha para o `php-fpm` | Existe |
 | `php-fpm` | Executa a API | Existe |
 | `scheduler` | Roda `schedule:work`, que dispara o relay a cada segundo | Chega com o outbox |
-| `horizon` | Consome a fila `registration-emails` e envia os e-mails | Chega com o outbox |
-| `redis` | Fila do Horizon, com `noeviction` | Chega com o outbox |
+| `horizon` | Consome a fila `registration-emails` e envia os e-mails | Existe |
+| `redis` | Fila do Horizon, com `noeviction` e sem persistência | Existe |
 
-**O que já existe.** `nginx` e `php-fpm` existem, com Laravel 13 sobre PHP 8.5, e o único endpoint é `GET /health`, que consulta o PostgreSQL e o `redis-limiter` ([contrato](api-contract.md#get-health)). `scheduler`, `horizon` e `redis` chegam com o outbox, porque sem o relay e o job não há o que rodar.
+**O que já existe.** A stack roda Laravel 13 sobre PHP 8.5 e tem dois endpoints: [`GET /health`](api-contract.md#get-health) e `POST /users`, com validação, limites, forma única de erro e CORS. Cada cadastro grava em `users` e publica `SendWelcomeEmailJob` no `redis`, sem transação comum entre as duas escritas (decisão 21), e o `horizon` envia o e-mail. O `scheduler` chega com o outbox, porque sem o relay não há o que agendar.
 
-- **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
+- **Módulos:** cada módulo é um pacote `modules/<nome>` em `app-modules`, carregado pelo `internachi/modular`, com o namespace `Modules\`. Nenhum módulo tem migrations (decisão 2).
+
+- **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição, e reinicia o `horizon`, porque um worker de longa duração não recarrega o código. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
 - **Dependências:** `make laravel-composer ARGS="<comando composer>"` é o único caminho, e só `composer.json` e `composer.lock` mudam na máquina.
-- **Testes:** PHPUnit, em `apis/laravel/tests`, rodando com `make test-laravel` num container descartável.
-- **Sem tabelas do framework:** sessão e cache em memória, fila `sync` até o outbox, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
+- **Testes:** Pest, em `app-modules/<nome>/tests`, rodando com `make test-laravel` num container descartável, com dependências simuladas. O comportamento contra PostgreSQL, Redis e Mailpit reais fica em `tests/infra`.
+- **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
 
-**Como o outbox funciona aqui**
+**Como o outbox vai funcionar aqui**
 - **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`. Ele faz a seleção do lote e o `dispatch` de `SendRegistrationEmailJob`.
-- **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco.
+- **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco. Até lá, ele usa as retentativas nativas do Horizon, com os mesmos valores (decisão 21).
 
 **Pontos de atenção**
 - A documentação do Laravel recomenda que tarefas por segundo sejam rápidas e deleguem o trabalho pesado a jobs. O relay segue isso: só publica, e o SMTP fica no job.
@@ -43,7 +45,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - Não usar o formato de validação nativo, que traz `(and N more errors)` em `message` e só textos em `errors`. O corpo de erro segue a [forma do contrato](api-contract.md#forma-do-corpo-de-erro).
 - Configurar duas conexões Redis: `default` para a fila e `limiter` para o `redis-limiter`, sem o prefixo automático do Laravel.
 - Confiar só no `nginx` como proxy, para o IP do cliente usado no contador ser o que o `nginx` repassa. Ver [IP do cliente](api-contract.md#ip-do-cliente).
-- Não usar o `RateLimiter` do framework no contador, porque ele grava com chave e formato próprios. O `RegistrationAttemptLimiter` executa o [script do contrato](api-contract.md#operação-no-redis).
+- Não usar o `RateLimiter` do framework no contador, porque ele grava com chave e formato próprios. O `RegistrationLimiter` executa o [script do contrato](api-contract.md#operação-no-redis).
 - Não usar as migrations padrão. Ver [database.md](database.md#migrations).
 
 Com a API no ar e em ambiente local, o painel do Horizon fica em `http://localhost:8080/horizon`.
@@ -54,23 +56,29 @@ apis/laravel/
 ├── docker/
 │   ├── nginx/default.conf
 │   └── php/Dockerfile
-├── routes/api.php            # rotas na raiz, sem /api
-└── app/Modules/
-    ├── Health/               # existe: GET /health
-    │   ├── Checks/
-    │   └── Http/Controllers/HealthController.php
-    ├── Users/                # planejado
-    │   ├── Actions/RegisterUserAction.php
-    │   ├── Http/Controllers/UserController.php
-    │   ├── Http/Requests/StoreUserRequest.php
-    │   ├── Http/Resources/UserResource.php
-    │   ├── Models/User.php
-    │   └── Services/RegistrationAttemptLimiter.php
-    └── Outbox/               # planejado
-        ├── Console/RelayOutboxCommand.php
-        ├── Jobs/SendRegistrationEmailJob.php
-        ├── Mail/RegistrationCompletedMail.php
-        └── Models/UserOutboxEvent.php
+└── app-modules/
+    ├── health/               # GET /health
+    │   ├── routes/health-routes.php
+    │   ├── src/Checks/
+    │   ├── src/Http/Controllers/HealthController.php
+    │   └── tests/
+    ├── users/                # POST /users e o e-mail de boas-vindas
+    │   ├── resources/lua/    # cópias dos scripts do contrato
+    │   ├── resources/views/
+    │   ├── routes/users-routes.php
+    │   ├── src/Actions/RegisterUserAction.php
+    │   ├── src/Http/Controllers/UserController.php
+    │   ├── src/Http/Requests/StoreUserRequest.php
+    │   ├── src/Jobs/SendWelcomeEmailJob.php
+    │   ├── src/Mail/WelcomeMail.php
+    │   ├── src/Models/User.php
+    │   ├── src/Repositories/UserRepository.php
+    │   ├── src/Services/RegistrationLimiter.php
+    │   ├── src/Services/WelcomeEmailPublisher.php
+    │   └── tests/
+    └── outbox/               # planejado
+        ├── src/Console/RelayOutboxCommand.php
+        └── src/Models/UserOutboxEvent.php
 ```
 
 ## NestJS

@@ -1,6 +1,6 @@
 # Banco de dados
 
-> **Status:** em construção. O schema abaixo é aplicado pela migration `0001_create_users_and_users_outbox`. As consultas ainda serão implementadas pelas stacks.
+> **Status:** em construção. O schema abaixo é aplicado pela migration `0001_create_users_and_users_outbox`. A stack Laravel implementa o `INSERT` em `users`, por enquanto sem `users_outbox` (decisão 21 de [decisions.md](decisions.md)); as demais consultas ainda serão implementadas pelas stacks.
 
 ## Visão geral
 
