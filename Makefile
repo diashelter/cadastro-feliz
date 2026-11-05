@@ -23,6 +23,7 @@ STACK_DIR_go := apis/golang
 
 stack_file = $(STACK_DIR_$(1))/docker-compose.yml
 stack_compose = $(COMPOSE) -f $(call stack_file,$(1))
+LARAVEL := $(call stack_compose,laravel)
 
 # Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa.
 define require_stack
@@ -36,7 +37,7 @@ define stack_down
 
 endef
 
-.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend down status logs-shared reset-limits test-infra
+.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel down status logs-shared reset-limits test-infra
 
 help:
 	@echo "Alvos:"
@@ -47,6 +48,9 @@ help:
 	@echo "  make test-frontend      checa os tipos e roda os testes do frontend"
 	@echo "  make up-<stack>         sobe uma stack (laravel, nest, go) e derruba as outras"
 	@echo "  make down-<stack>       derruba uma stack, mantendo os serviços comuns"
+	@echo "  make watch-<stack>      sobe uma stack e sincroniza as edições do código com ela"
+	@echo "  make laravel-composer   roda o composer da stack Laravel: make laravel-composer ARGS=\"require <pacote>\""
+	@echo "  make test-laravel       roda os testes da stack Laravel"
 	@echo "  make down               derruba tudo, menos o volume do PostgreSQL"
 	@echo "  make status             lista os containers do projeto"
 	@echo "  make logs-shared        acompanha os logs dos serviços comuns"
@@ -100,7 +104,38 @@ up-%:
 	@$(MAKE) --no-print-directory env network
 	$(foreach other,$(filter-out $*,$(STACKS)),$(call stack_down,$(other)))
 	@$(MAKE) --no-print-directory migrate
-	$(call stack_compose,$*) up --detach $(WAIT)
+	$(call stack_compose,$*) up --detach --build $(WAIT)
+
+# Em primeiro plano, depois de subir a stack como `make up-<stack>`. Ctrl+C encerra só
+# a sincronização; os containers continuam no ar. `watch-frontend` tem alvo próprio.
+watch-%:
+	$(call require_stack,$*)
+	@$(MAKE) --no-print-directory up-$*
+	$(call stack_compose,$*) watch --no-up
+
+# O composer roda num container descartável, com o usuário de quem chama o make, sobre
+# uma cópia de apis/laravel: vendor e bootstrap/cache nunca vão para a máquina, e só
+# composer.json e composer.lock voltam, quando o composer termina sem erro.
+laravel-composer:
+	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make laravel-composer ARGS="<comando composer>"' >&2; exit 1; }
+	$(call require_stack,laravel)
+	@$(MAKE) --no-print-directory env network
+	$(LARAVEL) run --rm --no-deps --user "$$(id -u):$$(id -g)" --env HOME=/tmp composer \
+		sh -c 'cp -R /src/. /tmp/app && cd /tmp/app && composer "$$@" && cp composer.json composer.lock /src/' \
+		composer $(ARGS)
+
+# Como test-frontend: constrói a imagem com o código atual e roda os testes num
+# container descartável, sem dependências e sem tocar no php-fpm em execução.
+test-laravel: env
+	$(call require_stack,laravel)
+	@created=0; \
+	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
+		docker network create $(NETWORK) >/dev/null && created=1; \
+	fi; \
+	$(LARAVEL) build php-fpm && $(LARAVEL) run --rm --no-deps php-fpm php artisan test; \
+	status=$$?; \
+	if [ $$created = 1 ]; then docker network rm $(NETWORK) >/dev/null; fi; \
+	exit $$status
 
 down-%:
 	$(call require_stack,$*)

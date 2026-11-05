@@ -128,6 +128,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: C25 tests/infra/docs.sh t_rf25_contract (infra)
 - last seen: 2026-11-04T20:09:40Z
 
+### L-020 - A new framework skeleton can register routes of its own; assert the route list equals what Surface declares.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `laravel` · harmful: 0
+- features: laravel-api-base
+- evidence: apis/laravel/config/filesystems.php:36 (C44) (laravel)
+- last seen: 2026-11-04T23:17:51Z
+
+### L-021 - A claim that CI installs a pinned tool is proven by the pinned download and checksum lines, not by the step name.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-api-base
+- evidence: tests/infra/laravel.sh t_lv34_ci (C34) (infra)
+- last seen: 2026-11-04T23:17:51Z
+
+### L-022 - Headers a contract fixes for every status are asserted on every status, not only on the success case.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `laravel` · harmful: 0
+- features: laravel-api-base
+- evidence: apis/laravel/tests/Feature/Health/HealthTest.php (C22) (laravel)
+- last seen: 2026-11-04T23:17:51Z
+
+### L-023 - A config default is proven in the running container, since the test runner's own env overrides it.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `laravel` · harmful: 0
+- features: laravel-api-base
+- evidence: tests/infra/laravel.sh t_lv45_no_table_defaults (C45) (laravel)
+- last seen: 2026-11-04T23:17:51Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
