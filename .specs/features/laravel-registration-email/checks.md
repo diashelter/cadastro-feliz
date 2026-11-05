@@ -196,6 +196,7 @@ Proof: run infra | PASS LV9 laravel leaves on switch and down
 
 **C52** - `/horizon` responde `200` em HTML sem recurso estático do `nginx`, e `/horizon/api/stats` traz `status` `running` (AC 52)
 Proof: run infra | PASS RG28 horizon panel answers
+Proof: run laravel | ✓ it denies the horizon panel outside local
 
 ### S6 - E-mail de boas-vindas
 
@@ -225,7 +226,7 @@ Proof: run infra | PASS LM1 queue down loses the mail
 **C60** - `horizon` parado, cadastro, `make down-laravel` e `make up-laravel`: 30 s depois, usuário em `users` e Mailpit sem mensagem (AC 60)
 Proof: run infra | PASS LM2 stack down loses the queued job
 
-**C61** - Mailpit parado, tentativas reduzidas esgotadas, Mailpit religado: 30 s depois, usuário em `users`, Mailpit sem mensagem, job em `/horizon/api/jobs/failed`, e só `users` e `schema_migrations` com dados (AC 61)
+**C61** - Mailpit parado, tentativas reduzidas esgotadas, Mailpit religado: 30 s depois, usuário em `users`, Mailpit sem mensagem, job em `/horizon/api/jobs/failed`, `users_outbox` sem linhas e nenhuma tabela além de `schema_migrations`, `users` e `users_outbox` (AC 61)
 Proof: run infra | PASS LM3 exhausted retries lose the mail
 
 **C62** - `docs/architecture.md` tem `## Limitações do fluxo sem outbox`, com uma linha para cada cenário e para a queda entre gravar e publicar, cada uma com o que acontece e o cenário que passa a cobri-la, e cita `tests/infra` (AC 62)
