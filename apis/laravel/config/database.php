@@ -151,13 +151,17 @@ return [
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
-            'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-database-'),
+            'prefix' => env('REDIS_PREFIX', ''),
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
 
+        // A fila da stack. O php-fpm define os tempos limite, para a publicação desistir
+        // em 1 s; o Horizon não os define, para o worker esperar o Redis voltar.
         'default' => [
             'url' => env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
+            'timeout' => (int) env('REDIS_TIMEOUT', 0),
+            'read_timeout' => (int) env('REDIS_READ_TIMEOUT', 0),
             'username' => env('REDIS_USERNAME'),
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),

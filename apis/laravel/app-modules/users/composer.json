@@ -1,0 +1,13 @@
+{
+    "name": "modules/users",
+    "description": "POST /users e o e-mail de boas-vindas.",
+    "type": "library",
+    "version": "1.0",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Users\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}

@@ -9,9 +9,13 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
+        "internachi/modular": "3.0.2",
         "laravel/framework": "^13.17",
-        "laravel/tinker": "^3.0"
+        "laravel/horizon": "v5.50.1",
+        "laravel/tinker": "^3.0",
+        "modules/health": "*",
+        "modules/users": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -20,7 +24,9 @@
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^12.5.12"
+        "pestphp/pest": "v5.3.5",
+        "pestphp/pest-plugin-laravel": "v5.0.1",
+        "phpunit/phpunit": "^13.4"
     },
     "autoload": {
         "psr-4": {
@@ -63,5 +69,14 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": {
+        "modules": {
+            "type": "path",
+            "url": "app-modules/*",
+            "options": {
+                "symlink": true
+            }
+        }
+    }
 }

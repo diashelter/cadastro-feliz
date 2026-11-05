@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Modules\Health\Http\Controllers;
+namespace Modules\Health\Http\Controllers;
 
-use App\Modules\Health\Checks\DatabaseCheck;
-use App\Modules\Health\Checks\HealthCheck;
-use App\Modules\Health\Checks\LimiterCheck;
+use Modules\Health\Checks\DatabaseCheck;
+use Modules\Health\Checks\HealthCheck;
+use Modules\Health\Checks\LimiterCheck;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Throwable;

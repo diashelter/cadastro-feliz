@@ -5,12 +5,10 @@ use Illuminate\Foundation\Bootstrap\LoadEnvironmentVariables;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
-// Rotas da API na raiz, sem o prefixo /api e sem a rota nativa /up: o endpoint de
-// saúde é GET /health (docs/api-contract.md).
+// As rotas da API ficam nos módulos, em app-modules, na raiz e sem a rota nativa /up:
+// o endpoint de saúde é GET /health (docs/api-contract.md).
 $app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        api: __DIR__.'/../routes/api.php',
-        apiPrefix: '',
         commands: __DIR__.'/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware): void {

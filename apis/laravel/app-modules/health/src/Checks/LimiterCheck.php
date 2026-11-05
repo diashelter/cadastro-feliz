@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Health\Checks;
+namespace Modules\Health\Checks;
 
 use Illuminate\Support\Facades\Redis;
 use RuntimeException;
