@@ -15,6 +15,9 @@ services:
       <<: *php-build
       target: app
     image: cadastro-feliz-laravel-php-fpm
+    # O limite de 1 s da conexão não cobre a resolução de nomes: sem isto, o nome de um
+    # container parado segura a requisição por 5 s quando o DNS externo não responde.
+    dns_opt: ["timeout:1", "attempts:1"]
     environment:
       APP_KEY: ${APP_KEY}
       APP_ENV: ${APP_ENV}

@@ -97,6 +97,8 @@ New: nothing - o schema não muda; esta rodada só escreve em `users`.
 | 7. Pest | `tests/Pest.php` liga os testes a `Tests\TestCase`; `phpunit.xml` ganha a suíte `Modules`, em `app-modules/*/tests`; `make test-laravel` continua `php artisan test`, sem banco nem Redis; os testes do módulo `health` passam para Pest, em `app-modules/health/tests` | banco real em `make test-laravel` - exigiria o migrate no alvo e quebra LV31, que fixa que ele roda sem dependências |
 | 8. decisão 21 e texto do e-mail | `docs/decisions.md`, origem `Definida`: "Stack Laravel sem outbox até a rodada do outbox"; assunto `Boas-vindas ao Cadastro Feliz!` e o corpo do slice `WelcomeMail` do design em `docs/architecture.md`, valendo para as três stacks | editar o contrato como se o outbox nunca tivesse existido - apagaria o alvo da próxima rodada |
 
+| 9. falha rápida na resolução de nomes (achado no build) | `php-fpm` com `dns_opt: [timeout:1, attempts:1]`; o conector `pgsql` é `App\\Database\\FailFastPostgresConnector`, que não reconecta ao abrir a conexão | só o `dns_opt` - o Laravel trata `could not translate host name` como conexão perdida e tenta de novo, somando 2 s no banco e estourando os 3 s com as duas dependências paradas; `curl --max-time` maior no teste - esconderia o defeito do contrato |
+
 - Nothing else in this change is hard to reverse
 
 ## Criteria
@@ -113,6 +115,9 @@ A `main` volta a passar nos testes antes de qualquer mudança, e `/health` cumpr
 4. IF o `postgres` e o `redis-limiter` estão parados THEN `GET /health` SHALL responder `503` com os dois checks em `fail` em menos de 3 s
 5. IF o `postgres` está parado THEN o log do `php-fpm` SHALL ter uma linha com `health check database`, e o corpo de `/health` SHALL ter só as chaves `status` e `checks`
 6. WHEN `make test-frontend`, `make test-laravel` e `bash tests/infra/run.sh` rodam com todas as fatias prontas THEN cada um SHALL sair com código `0`
+
+69. IF o DNS externo não responde e o `postgres` e o `redis-limiter` estão parados THEN `GET /health` SHALL responder `503` com os dois checks em `fail` em menos de 3 s
+    - é o caso do runner do CI: o nome de um container parado vai para o DNS externo, que o limite de 1 s da conexão não cobre
 
 ### S2: Testes em Pest (P1)
 
@@ -257,7 +262,7 @@ Os documentos dizem o que existe hoje, sem apagar o alvo da próxima rodada.
 | Testes com banco real | ficam em `tests/infra`; `make test-laravel` segue sem dependências | default do design aprovado | y |
 | Namespace dos módulos | `Modules\`, o padrão da biblioteca | default do design aprovado | y |
 | Visual do HTML | uma coluna estreita, tipografia do sistema, sem imagens nem recursos externos, ajustável vendo no Mailpit | default do design aprovado | y |
-| Causa da falha do `/health` | a resolução do nome de um container parado é só hipótese; o build reproduz antes de corrigir, e os critérios 2 a 5 valem seja qual for a causa | Docker estava parado na análise, e os testes passaram na máquina do Verifier da base | n |
+| Causa da falha do `/health` | confirmada no build: com um DNS externo mudo, `getaddrinfo` leva 5 s, fora do limite de 1 s da conexão, e o Laravel reconecta o PostgreSQL ao ver `could not translate host name`, chegando a 10 s; sem DNS externo, como no Docker Desktop, o nome falha na hora e o teste passa | reproduzido com `--dns` apontando para um endereço mudo; explica por que `LV14` passa e `LV15` não | y |
 | Versões | as de door 1 | as mais recentes no Packagist em 2026-11-05 que aceitam Laravel 13 e PHP 8.5 | n |
 | E-mail com espaços nas pontas | `trim` antes de validar, não só antes de gravar | o formulário envia o que foi digitado (decisão 18), e o contrato normaliza com `trim`; recusar `" ana@x.com "` frustraria o caso que o formulário gera | n |
 | Formato do e-mail | validação sintática do Laravel, sem DNS; os exemplos do critério 21 são o que precisa valer | o contrato pede só validação sintática e deixa os casos de borda em aberto entre as stacks | n |

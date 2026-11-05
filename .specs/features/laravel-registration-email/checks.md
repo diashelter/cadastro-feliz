@@ -5,7 +5,7 @@ Run laravel: `make test-laravel`
 Run infra: `bash tests/infra/run.sh`
 Plan: `.specs/features/laravel-registration-email/plan.md`
 
-68 checks in 8 slices · 8 one-way doors · 0 open, of which 0 block
+69 checks in 8 slices · 9 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -251,11 +251,16 @@ Proof: run infra | PASS RD4 infrastructure docs list the queue
 **C68** - O `README.md` diz que a stack Laravel responde `POST /users` sem outbox, cita a decisão 21 e não diz mais que o `201` garante o evento gravado (AC 68)
 Proof: run infra | PASS RD5 readme states the limitation
 
+### Acrescentados no build
+
+**C69** - Com um DNS externo que não responde e o `postgres` e o `redis-limiter` parados, `/health` responde `503` com os dois em `fail` em menos de 3 s (AC 69)
+Proof: run infra | PASS LV52 health within limit when external dns is mute
+
 ## Coverage
 
 | Set (size) | Member -> proof | Unproven |
 | --- | --- | --- |
-| Landing doors (8) | dependências C7 · C12 · C44 · C45 · módulos C12 · C13 · C14 · C15 · C17 · contrato C19 · C21 · C25 · C27 · C36 · C39 · C40 · job na fila C46 · C47 · ponto único de publicação C38 · C59 · containers da fila C42 · C44 · C45 · C48 · Pest C8 · C9 · C10 · C11 · decisão 21 e texto C63 · C64 | - |
+| Landing doors (9) | dependências C7 · C12 · C44 · C45 · módulos C12 · C13 · C14 · C15 · C17 · contrato C19 · C21 · C25 · C27 · C36 · C39 · C40 · job na fila C46 · C47 · ponto único de publicação C38 · C59 · containers da fila C42 · C44 · C45 · C48 · Pest C8 · C9 · C10 · C11 · decisão 21 e texto C63 · C64 · falha rápida no DNS C69 | - |
 | `POST /users` statuses (5) | `201` C19 · `409` C25 · `422` C21 · `429` C27 · `500` C36 · C37 | - |
 | `OPTIONS /users` statuses (1) | `204` C39 | - |
 | `GET /horizon` statuses (2) | `200` C52 · `403` fora de `local`: C52 | - |
@@ -263,7 +268,7 @@ Proof: run infra | PASS RD5 readme states the limitation
 | chaves e IP canônico, AC 29 (4 exemplos) | par C29 · cota C29 · IPv4 mapeado C29 · IPv6 C29 | - |
 | limites, AC 27 a 34 (8) | sequência do par C27 · sem banco C28 · `X-Forwarded-For` C30 · outro IP C31 · cota C32 · `409` sem cota C33 · paralelo C34 · `201` consome C38 | - |
 | dependências fora do ar em `POST /users` (3) | `redis-limiter` C36 · `postgres` C37 · `redis` da fila C38 | - |
-| dependências fora do ar em `GET /health` (3) | `postgres` C2 · `redis-limiter` C3 · os dois C4 | - |
+| dependências fora do ar em `GET /health` (4) | `postgres` C2 · `redis-limiter` C3 · os dois C4 · os dois com DNS externo mudo C69 | - |
 | textos do e-mail (5) | C54, table-driven over all 5 | - |
 | partes do e-mail (2) | texto C54 · HTML C54 · C55 · C56 | - |
 | cenários de limitação (4) | Redis parado C59 · stack derrubada C60 · SMTP esgotado C61 · queda entre gravar e publicar: só documento, C62 | - |
@@ -279,7 +284,7 @@ Proof: run infra | PASS RD5 readme states the limitation
 - authorization: C27, C32 - cadastro público com limites; painel do Horizon só em `local`, C52
 - concurrency: C26, C34
 - data lifecycle: C20 (gravado normalizado), C60 (a fila é descartada com a stack); limpeza de dados fica fora, como em docs/database.md
-- dependency failure: C2, C3, C4, C36, C37, C38, C48, C49
+- dependency failure: C2, C3, C4, C69, C36, C37, C38, C48, C49
 - state transitions: n/a - sem outbox, nenhum registro muda de status nesta rodada; `users_outbox` fica vazia, C20
 - observability: C5, C38 - a falha de cada check e de cada publicação vai para o log, que `make logs-laravel` acompanha
 

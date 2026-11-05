@@ -23,6 +23,16 @@ wait_for() {
 lv_healthy() { [ "$(health "$NG")" = healthy ] && [ "$(health "$FPM")" = healthy ]; }
 status_is() { [ "$(api_status "$1")" = "$2" ]; }
 body_is() { [ "$(api "$1")" = "$2" ]; }
+# health_within_limit <corpo esperado>: /health responde 503, com esse corpo, em menos de 3 s.
+health_within_limit() {
+  local expected="$1" out code secs body ok=0
+  out="$(curl -s -o "$WORK/limit.body" --max-time 10 -w '%{http_code} %{time_total}' localhost:8080/health)"
+  code="${out% *}"; secs="${out#* }"; body="$(cat "$WORK/limit.body")"
+  [ "$code" = 503 ] || { note "status $code"; ok=1; }
+  [ "$body" = "$expected" ] || { note "corpo: $body"; ok=1; }
+  awk -v s="$secs" 'BEGIN { exit !(s < 3) }' || { note "levou ${secs}s"; ok=1; }
+  return $ok
+}
 shared_back() { wait_for 60 shared_healthy; }
 
 # Guarda e devolve um arquivo da cópia de trabalho, para cada teste deixar tudo como achou.
@@ -212,8 +222,7 @@ check "LV45 laravel defaults use no table" t_lv45_no_table_defaults
 t_lv14_limiter_stopped() {
   local ok=0
   docker stop "$(container redis-limiter)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$LIMITER_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$LIMITER_FAIL" || ok=1
   sleep 30
   lv_healthy || { note "depois de 30 s: nginx $(health "$NG"), php-fpm $(health "$FPM")"; ok=1; }
   docker start "$(container redis-limiter)" >/dev/null
@@ -225,8 +234,7 @@ check "LV14 health 503 when limiter stopped" t_lv14_limiter_stopped
 t_lv15_postgres_stopped() {
   local ok=0
   docker stop "$(container postgres)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$DATABASE_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$DATABASE_FAIL" || ok=1
   docker start "$(container postgres)" >/dev/null
   shared_back
   return $ok
@@ -236,13 +244,29 @@ check "LV15 health 503 when postgres stopped" t_lv15_postgres_stopped
 t_lv16_both_stopped() {
   local ok=0
   docker stop "$(container postgres)" "$(container redis-limiter)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$BOTH_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$BOTH_FAIL" || ok=1
   docker start "$(container postgres)" "$(container redis-limiter)" >/dev/null
   shared_back
   return $ok
 }
 check "LV16 health 503 when both stopped" t_lv16_both_stopped
+
+# Como no runner do CI: o nome de um container parado vai para um DNS externo. O endereço
+# abaixo não responde, e o limite de 1 s da conexão não cobre a resolução de nomes.
+t_lv52_mute_dns() {
+  local compose="$LV/docker-compose.yml" ok=0
+  save "$compose"
+  sed -i 's/^  php-fpm:$/  php-fpm:\n    dns: [10.255.255.1]/' "$compose"
+  mkq up-laravel || { note "make up-laravel saiu com erro"; ok=1; }
+  docker stop "$(container postgres)" "$(container redis-limiter)" >/dev/null
+  health_within_limit "$BOTH_FAIL" || ok=1
+  docker start "$(container postgres)" "$(container redis-limiter)" >/dev/null
+  shared_back
+  restore "$compose"
+  mkq up-laravel
+  return $ok
+}
+check "LV52 health within limit when external dns is mute" t_lv52_mute_dns
 
 # paused_health <serviço> <corpo esperado>: pausa o serviço, mede /health e despausa.
 paused_health() {
