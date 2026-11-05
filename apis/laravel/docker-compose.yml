@@ -86,12 +86,11 @@ services:
         - action: rebuild
           path: ./docker/php
 
-  # O worker: a mesma imagem do php-fpm, consumindo a fila registration-emails.
+  # O worker: a mesma imagem do php-fpm, consumindo a fila registration-emails. Sem build
+  # próprio: o Compose grava o nome do serviço na imagem, e dois builds da mesma tag a
+  # fariam alternar de ID, recriando os containers a cada subida.
   horizon:
     image: cadastro-feliz-laravel-php-fpm
-    build:
-      <<: *php-build
-      target: app
     command: ["php", "artisan", "horizon"]
     environment: *app-env
     depends_on:
@@ -117,12 +116,6 @@ services:
         - action: sync+restart
           path: ./config
           target: /var/www/html/config
-        - action: rebuild
-          path: ./composer.json
-        - action: rebuild
-          path: ./composer.lock
-        - action: rebuild
-          path: ./docker/php
 
   # Só a fila, separada do redis-limiter (decisão 5). Sem persistência: a fila é descartada
   # com a stack, e essa perda é uma das limitações em estudo (decisão 21).
