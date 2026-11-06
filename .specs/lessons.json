@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 24,
+  "next_id": 31,
   "lessons": [
     {
       "id": "L-001",
@@ -418,6 +418,132 @@
       ],
       "created": "2026-11-04T23:17:51Z",
       "last_seen": "2026-11-04T23:17:51Z"
+    },
+    {
+      "id": "L-024",
+      "key": "weak_test::a claim that a record keeps its status is proven by reading the status not only its counters",
+      "text": "A claim that a record keeps its status is proven by reading the status, not only its counters.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C38 tests/infra/outbox.sh t_ob38_database_down (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-025",
+      "key": "weak_test::a deadline in a criterion is asserted as elapsed time a retry loop whose rounds add up past it passes late results",
+      "text": "A deadline in a criterion is asserted as elapsed time; a retry loop whose rounds add up past it passes late results.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C42 tests/infra/registration.sh t_rg27_watch_updates_worker (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-026",
+      "key": "weak_test::a deadline is measured from the event that starts it not after waits for other services to become healthy",
+      "text": "A deadline is measured from the event that starts it, not after waits for other services to become healthy.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C43 tests/infra/outbox.sh t_lm1_queue_down (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-027",
+      "key": "weak_test::a claim that containers were recreated compares each container id and the change under test must really produce a new image",
+      "text": "A claim that containers were recreated compares each container id, and the change under test must really produce a new image.",
+      "signal": "weak_test",
+      "scope": "laravel",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C56 tests/infra/laravel.sh rebuild_on (laravel) (laravel)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-028",
+      "key": "ac_gap::a fail fast setting is proven with the dependency frozen in the container that holds the setting a stopped service fails too fast to show it",
+      "text": "A fail-fast setting is proven with the dependency frozen, in the container that holds the setting; a stopped service fails too fast to show it.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "door 6 tests/infra/outbox.sh t_ob40_frozen_queue_relay (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-029",
+      "key": "weak_test::a startup latency claim is measured away from the natural trigger or the slower path passes by timing",
+      "text": "A startup-latency claim is measured away from the natural trigger, or the slower path passes by timing.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "door 9 tests/infra/outbox.sh t_ob41_scheduler_start (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-030",
+      "key": "weak_test::a loop that samples a condition must assert it sampled at least once or it passes without observing anything",
+      "text": "A loop that samples a condition must assert it sampled at least once, or it passes without observing anything.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "laravel-outbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C37 tests/infra/outbox.sh t_ob37_no_transaction (infra) (infra)"
+      ],
+      "created": "2026-11-06T03:38:55Z",
+      "last_seen": "2026-11-06T03:38:55Z"
     }
   ]
 }
