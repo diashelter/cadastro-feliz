@@ -396,12 +396,15 @@ check "LV39 readme describes laravel base" t_lv39_readme
 t_lv40_stacks() {
   local body row service term ok=0
   body="$(section "$WORK/docs/stacks.md" 'Laravel$')"
-  for service in nginx php-fpm horizon redis; do
+  for service in nginx php-fpm scheduler horizon redis; do
     row="$(grep -E "^\| \`$service\` \|" <<< "$body" | head -1)"
     grep -qF 'Existe' <<< "$row" || { note "linha de $service: $row"; ok=1; }
   done
-  row="$(grep -E '^\| `scheduler` \|' <<< "$body" | head -1)"
-  grep -qF 'Chega com o outbox' <<< "$row" || { note "linha de scheduler: $row"; ok=1; }
+  grep -qF 'SendWelcomeEmailJob' <<< "$body" || { note "stacks.md › Laravel sem SendWelcomeEmailJob"; ok=1; }
+  grep -qF 'SendRegistrationEmailJob' <<< "$body" && { note "stacks.md › Laravel ainda cita SendRegistrationEmailJob"; ok=1; }
+  grep -qF 'WelcomeEmailPublisher' <<< "$body" && { note "stacks.md › Laravel ainda cita WelcomeEmailPublisher"; ok=1; }
+  grep -qF 'outbox/' <<< "$body" || { note "árvore sem app-modules/outbox"; ok=1; }
+  grep -qF 'src/Console/Commands/RelayOutboxCommand.php' <<< "$body" || { note "árvore sem o caminho do relay"; ok=1; }
   for term in 'GET /health' 'make watch-laravel' 'make laravel-composer' 'app-modules' 'Pest'; do
     grep -qF "$term" <<< "$body" || { note "stacks.md › Laravel sem '$term'"; ok=1; }
   done
@@ -420,33 +423,58 @@ check "LV41 help lists laravel targets" t_lv41_help
 
 # --- Cadastro sem outbox (.specs/features/laravel-registration-email) ---
 
-t_lm4_limitations() {
-  local body row ok=0
-  body="$(section "$WORK/docs/architecture.md" 'Limitações do fluxo sem outbox$')"
+# Cada linha do antes e depois: o caso, o que acontecia, o que acontece agora e a prova.
+t_lm4_before_after() {
+  local body row line ok=0
+  body="$(section "$WORK/docs/architecture.md" 'Antes e depois do outbox$')"
   [ -n "$body" ] || { note "architecture.md sem a seção"; return 1; }
-  grep -qF 'tests/infra' <<< "$body" || { note "seção sem tests/infra"; ok=1; }
-  for row in 'Redis da fila parado no cadastro|Cenário 8' '`horizon` parado e a stack derrubada|Cenário 6' \
-    'SMTP fora até esgotar as tentativas|Cenário 5' 'API cai entre gravar e publicar|Cenário 4'; do
-    grep -F "| ${row%%|*} |" <<< "$body" | grep -qF "${row##*|}" || { note "sem a linha de '${row%%|*}' com ${row##*|}"; ok=1; }
+  grep -qE '^## Limitações do fluxo sem outbox' "$WORK/docs/architecture.md" && { note "a seção antiga continua"; ok=1; }
+  grep -qF 'tests/infra/outbox.sh' <<< "$body" || { note "seção sem tests/infra/outbox.sh"; ok=1; }
+  grep -qE '^\| Caso \| Sem outbox \| Com outbox \| Prova \|$' <<< "$body" || { note "tabela sem as 4 colunas"; ok=1; }
+  for row in 'Fila parada no cadastro|nunca sai|`pending`|LM1, cenário 8' \
+    '`horizon` parado e a stack derrubada|nunca sai|republicação|LM2, cenário 6' \
+    'SMTP fora até esgotar as tentativas|sem registro no PostgreSQL|`failed`|LM3' \
+    'SMTP volta antes de esgotar as tentativas|Horizon|`attempts`|RG26, cenário 5' \
+    'API cai entre as duas escritas|perdido|transação|OB4, cenário 4'; do
+    IFS='|' read -r case_name before after proof <<< "$row"
+    line="$(grep -F "| $case_name |" <<< "$body")"
+    [ -n "$line" ] || { note "sem a linha de '$case_name'"; ok=1; continue; }
+    grep -qF "$before" <<< "$(cut -d'|' -f3 <<< "$line")" || { note "'$case_name' sem o antes: $line"; ok=1; }
+    grep -qF "$after" <<< "$(cut -d'|' -f4 <<< "$line")" || { note "'$case_name' sem o agora: $line"; ok=1; }
+    grep -qF "$proof" <<< "$(cut -d'|' -f5 <<< "$line")" || { note "'$case_name' sem a prova: $line"; ok=1; }
   done
   return $ok
 }
-check "LM4 limitations are recorded" t_lm4_limitations
+check "LM4 before and after is recorded" t_lm4_before_after
+
+t_od1_architecture() {
+  local f="$WORK/docs/architecture.md" status worker ok=0
+  status="$(grep -m1 -F '> **Status:**' "$f")"
+  grep -qF 'stack Laravel implementa o outbox' <<< "$status" || { note "status: $status"; ok=1; }
+  grep -qF 'sem o outbox' <<< "$status" && { note "o status ainda diz sem o outbox"; ok=1; }
+  worker="$(awk '/^## Worker/{on=1; next} on && /^## /{exit} on' "$f")"
+  grep -qF '<event_id>@cadastro-feliz.local' <<< "$worker" || { note "› Worker sem o Message-ID"; ok=1; }
+  return $ok
+}
+check "OD1 architecture describes the outbox" t_od1_architecture
 
 t_rd1_decision() {
-  local f="$WORK/docs/decisions.md" body nine term ok=0
+  local f="$WORK/docs/decisions.md" body nine message term ok=0
   grep -qE '^\| \[21\]\(#21-[^)]*\) \| Stack Laravel sem outbox até a rodada do outbox \| Definida \|$' "$f" \
     || { note "índice sem a decisão 21 Definida"; ok=1; }
   body="$(section "$f" '21\. Stack Laravel sem outbox até a rodada do outbox$')"
   [ -n "$body" ] || { note "seção 21 ausente"; return 1; }
-  for term in '`201`' 'users_outbox' 'rodada do outbox'; do
-    grep -qF -- "$term" <<< "$body" || { note "decisão 21 sem '$term'"; ok=1; }
-  done
+  grep -qF '**Encerrada**' <<< "$body" || { note "decisão 21 não está encerrada"; ok=1; }
   nine="$(section "$f" '9\. Retentativas controladas pelo banco$')"
-  grep -qF 'Suspensa na stack Laravel' <<< "$nine" || { note "decisão 9 não diz que está suspensa"; ok=1; }
+  [ -n "$nine" ] || { note "seção 9 ausente"; ok=1; }
+  grep -qF 'Suspensa na stack Laravel' <<< "$nine" && { note "decisão 9 ainda diz que está suspensa"; ok=1; }
+  grep -qE '^\| \[22\]\(#22-[^)]*\) \| `Message-ID` derivado do evento \| Proposta \|$' "$f" \
+    || { note "índice sem a decisão 22"; ok=1; }
+  message="$(section "$f" '22\. `Message-ID` derivado do evento$')"
+  grep -qF '<event_id>@cadastro-feliz.local' <<< "$message" || { note "seção 22 sem o formato"; ok=1; }
   return $ok
 }
-check "RD1 decision 21 recorded" t_rd1_decision
+check "RD1 decision 21 closed and decision 22 recorded" t_rd1_decision
 
 t_rd2_mail_documented() {
   local f="$WORK/docs/architecture.md" body term ok=0
@@ -460,29 +488,38 @@ t_rd2_mail_documented() {
 }
 check "RD2 welcome mail documented" t_rd2_mail_documented
 
-t_rd3_contract_status() {
-  local status
+t_rd3_status() {
+  local status ok=0
   status="$(grep -m1 -F '> **Status:**' "$CONTRACT_DOC")"
-  grep -qF 'stack Laravel implementa `POST /users`' <<< "$status" || { note "status: $status"; return 1; }
-  grep -qF 'decisão 21' <<< "$status" || { note "status sem a decisão 21"; return 1; }
+  grep -qF 'stack Laravel implementa `POST /users`' <<< "$status" || { note "status do contrato: $status"; ok=1; }
+  grep -qE 'decisão 21|sem o outbox|ainda não tem o outbox' <<< "$status" && { note "status do contrato ainda sem outbox: $status"; ok=1; }
+  status="$(grep -m1 -F '> **Status:**' "$WORK/docs/database.md")"
+  grep -qF 'stack Laravel implementa' <<< "$status" || { note "status do banco: $status"; ok=1; }
+  grep -qE 'decisão 21|sem `users_outbox`' <<< "$status" && { note "status do banco ainda sem outbox: $status"; ok=1; }
+  return $ok
 }
-check "RD3 contract status" t_rd3_contract_status
+check "RD3 contract and database status" t_rd3_status
 
 t_rd4_infrastructure() {
   local f="$WORK/docs/infrastructure.md" versions row ok=0
   versions="$(awk '/^### Versões fixadas/{on=1; next} on && /^##/{exit} on' "$f")"
   grep -qF 'redis:8.10.3-alpine' <<< "$(grep -F '`redis` (Laravel)' <<< "$versions")" || { note "Versões fixadas sem o redis da Laravel"; ok=1; }
   row="$(grep -F '| `apis/laravel/docker-compose.yml` |' "$f")"
-  grep -qF '`horizon`' <<< "$row" && grep -qF '`redis`' <<< "$row" || { note "linha do compose: $row"; ok=1; }
+  grep -qF '`horizon`' <<< "$row" && grep -qF '`redis`' <<< "$row" && grep -qF '`scheduler`' <<< "$row" || { note "linha do compose: $row"; ok=1; }
+  grep -qF 'chega com o outbox' <<< "$row" && { note "linha do compose ainda promete o scheduler: $row"; ok=1; }
   return $ok
 }
-check "RD4 infrastructure docs list the queue" t_rd4_infrastructure
+check "RD4 infrastructure docs list the queue and the scheduler" t_rd4_infrastructure
 
 t_rd5_readme() {
   local f="$WORK/README.md" ok=0
-  grep -qF 'por enquanto sem o outbox (decisão 21)' "$f" || { note "README sem a stack sem outbox"; ok=1; }
+  local limits
+  grep -qF 'por enquanto sem o outbox' "$f" && { note "README ainda diz sem outbox"; ok=1; }
+  grep -qF 'E-mail perdido na stack Laravel' "$f" && { note "README ainda tem o limite antigo"; ok=1; }
+  grep -qF 'A stack Laravel implementa o outbox' "$f" || { note "README sem a stack com outbox"; ok=1; }
   grep -qF '`POST /users`' "$f" || { note "README sem POST /users"; ok=1; }
-  grep -qF 'se a API responde `201`, o evento está gravado' "$f" && { note "README ainda promete o evento gravado"; ok=1; }
+  limits="$(section "$f" 'Limites conhecidos$')"
+  grep -qF '`failed`' <<< "$limits" && grep -qF 'manual' <<< "$limits" || { note "Limites conhecidos sem o reprocessamento manual de failed"; ok=1; }
   return $ok
 }
-check "RD5 readme states the limitation" t_rd5_readme
+check "RD5 readme states the outbox" t_rd5_readme
