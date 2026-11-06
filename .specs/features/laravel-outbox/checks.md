@@ -236,6 +236,7 @@ Proof: run infra | PASS RD5 readme states the outbox
 
 - **Settled mid-build:** none
 - **Dispatched:** none
-- **Boundary:** nothing closed yet
-- **Abandoned:** none
+- **Boundary:** C1-C56 closed at `9dd582d`
+- **Abandoned:** o `scheduler` só com `schedule:work`, trocado na door 9, porque ele dispara apenas na virada do minuto. OB24 atrasa o `COMMIT` em 8 s, mais que os 3 s do critério, porque o worker pode dormir 3 s com a fila vazia e a mensagem precisa chegar antes do `COMMIT`.
+- **Ambiente da prova:** Docker real no macOS, onde `tests/infra` depende de ferramentas GNU e do bash 4. As provas rodam com adaptadores fora do repositório para `sed -i`, `sed 1a`, `stat -c`, `timeout`, `tac`, `paste` e `mapfile`. O CI, em Linux, não precisa deles e ainda não rodou este branch, porque não houve push.
 - **Walked:** not applicable - nenhuma tela muda; o formulário é coberto pelos testes existentes
