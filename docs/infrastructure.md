@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `horizon` e `redis`, e é testado por `make test-infra` e `make test-laravel`; os de NestJS e Go ainda não foram criados.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, e é testado por `make test-infra` e `make test-laravel`; os de NestJS e Go ainda não foram criados.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
@@ -36,7 +36,7 @@ flowchart TB
 | Arquivo | Nome do projeto | Serviços |
 |---|---|---|
 | `docker-compose.yml` | `cadastro-feliz-shared` | `frontend`, `postgres`, `redis-limiter`, `mailpit`, `migrate` |
-| `apis/laravel/docker-compose.yml` | `cadastro-feliz-laravel` | `nginx`, `php-fpm`, `horizon` e `redis`; o `scheduler` chega com o outbox |
+| `apis/laravel/docker-compose.yml` | `cadastro-feliz-laravel` | `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis` |
 | `apis/nestjs/docker-compose.yml` | `cadastro-feliz-nest` | `api`, `worker`, `redis` |
 | `apis/golang/docker-compose.yml` | `cadastro-feliz-go` | `api`, `worker`, `rabbitmq` |
 
@@ -84,7 +84,7 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make up-laravel` | Sobe a stack Laravel, reconstruindo a imagem do `php-fpm` com o código atual |
 | `make up-nest` | Sobe a stack NestJS |
 | `make up-go` | Sobe a stack Go |
-| `make watch-laravel` | Sobe a stack Laravel como `make up-laravel` e fica em primeiro plano copiando cada edição de `app`, `app-modules`, `bootstrap`, `config`, `routes` e `tests` para o `php-fpm` e reiniciando o `horizon` quando muda `app`, `app-modules` ou `config`. Uma mudança em `composer.json`, `composer.lock` ou `docker/php` reconstrói a imagem e recria o `php-fpm`; o `horizon` passa a usá-la no próximo `make up-laravel`. Ctrl+C encerra só a sincronização. A regra é genérica, `make watch-<stack>`, e recusa uma stack sem compose |
+| `make watch-laravel` | Sobe a stack Laravel como `make up-laravel` e fica em primeiro plano copiando cada edição de `app`, `app-modules`, `bootstrap`, `config`, `routes` e `tests` para o `php-fpm`, copiando `app`, `app-modules`, `config` e `routes` para o `scheduler`, e reiniciando o `horizon` quando muda `app`, `app-modules` ou `config`. Uma mudança em `composer.json`, `composer.lock` ou `docker/php` reconstrói a imagem e recria o `php-fpm`, o `scheduler` e o `horizon`, que dependem dele para voltarem a subir nesse momento. Ctrl+C encerra só a sincronização. A regra é genérica, `make watch-<stack>`, e recusa uma stack sem compose |
 | `make laravel-composer ARGS="<comando composer>"` | Roda o composer da stack Laravel em um container descartável, com o usuário de quem chama, sobre uma cópia de `apis/laravel`. Só `composer.json` e `composer.lock` voltam, e só quando o composer termina sem erro |
 | `make test-laravel` | Reconstrói a imagem do `php-fpm` com o código atual e roda os testes do Pest, com `php artisan test`, num container descartável, sem banco nem Redis. Não recria nem para o `php-fpm` em execução, e remove a rede quando foi ele que a criou |
 | `make down-laravel` | Derruba a stack Laravel |
@@ -119,7 +119,7 @@ O Compose não ordena serviços de projetos diferentes, por isso essa ordem é r
 | `migrate` | `migrate/migrate:v4.20.1` |
 | `frontend` | `cadastro-feliz-shared-frontend`, construída de `frontend/Dockerfile` sobre `node:26.13.0-alpine`, com `next` 16.4.5 e `react` 19.3.1 fixados em `frontend/package.json` |
 | `nginx` (Laravel) | `nginx:1.30.6-alpine` |
-| `php-fpm` e `horizon` (Laravel) | `cadastro-feliz-laravel-php-fpm`, construída de `apis/laravel/docker/php/Dockerfile` sobre `php:8.5.12-fpm-alpine`, com `pdo_pgsql`, `pcntl`, phpredis 6.3.0 e o composer de `composer:2.11.1`; `laravel/framework` v13.40.0, `laravel/horizon` v5.50.1, `internachi/modular` 3.0.2, `pestphp/pest` v5.3.5 e `phpunit/phpunit` da série 13 travados em `apis/laravel/composer.lock` |
+| `php-fpm`, `scheduler` e `horizon` (Laravel) | `cadastro-feliz-laravel-php-fpm`, construída de `apis/laravel/docker/php/Dockerfile` sobre `php:8.5.12-fpm-alpine`, com `pdo_pgsql`, `pcntl`, phpredis 6.3.0 e o composer de `composer:2.11.1`; `laravel/framework` v13.40.0, `laravel/horizon` v5.50.1, `internachi/modular` 3.0.2, `pestphp/pest` v5.3.5 e `phpunit/phpunit` da série 13 travados em `apis/laravel/composer.lock` |
 | `redis` (Laravel) | `redis:8.10.3-alpine` |
 
 ### O que cada `down` faz com os dados
@@ -144,11 +144,11 @@ O `frontend` roda `next dev` na porta 3000, como o usuário `node`. Não há bui
 
 O `nginx` publica a porta 8080 e encaminha toda requisição para o Laravel no `php-fpm`, resolvendo o nome dele a cada requisição, para continuar funcionando quando o `php-fpm` é recriado. Não há build de produção: o OPcache revalida os arquivos a cada requisição (decisão 20 de [decisions.md](decisions.md)).
 
-- **O código entra por cópia, não por bind mount.** A imagem leva o código e o `vendor/`. Com `make watch-laravel` rodando, cada edição vale na próxima requisição, sem reiniciar o `php-fpm`, e o `horizon` reinicia para usar o código novo. `vendor/` nunca existe na máquina.
-- **Falha rápida.** O `php-fpm` limita a resolução de nomes a 1 s e publica na fila com tempo limite de 1 s, para uma dependência parada não segurar a resposta. O limite de conexão não cobre a resolução de nomes, que levaria 5 s quando o DNS externo não responde.
+- **O código entra por cópia, não por bind mount.** A imagem leva o código e o `vendor/`. Com `make watch-laravel` rodando, cada edição vale na próxima requisição, sem reiniciar o `php-fpm`, na próxima execução do relay, sem reiniciar o `scheduler`, e o `horizon` reinicia para usar o código novo. `vendor/` nunca existe na máquina.
+- **Falha rápida.** O `php-fpm` limita a resolução de nomes a 1 s, para uma dependência parada não segurar a resposta, e o `scheduler` publica na fila com tempo limite de 1 s, para uma fila travada não segurar o lote. O limite de conexão não cobre a resolução de nomes, que levaria 5 s quando o DNS externo não responde.
 - **Saudável é o Laravel responder `/health`.** O `nginx` fica saudável quando `GET /health` responde `200` ou `503`; o `php-fpm`, quando responde ao ping do FPM. Uma dependência fora do ar aparece no corpo de `/health`, e a stack continua no ar.
-- **Variáveis só do `.env` da raiz.** `apis/laravel` não tem `.env`; o compose repassa ao `php-fpm` as variáveis de que o Laravel precisa.
-- **Nenhuma tabela do framework.** Sessão e cache ficam em memória, a fila fica no `redis`, as falhas de job ficam só no Horizon e o log vai para a saída de erro do container, que `make logs-laravel` acompanha.
+- **Variáveis só do `.env` da raiz.** `apis/laravel` não tem `.env`; o compose repassa ao `php-fpm`, ao `scheduler` e ao `horizon` as variáveis de que o Laravel precisa.
+- **Nenhuma tabela do framework.** Sessão e cache ficam em memória, a fila fica no `redis`, as falhas de envio ficam em `users_outbox`, as demais falhas de job ficam só no Horizon e o log vai para a saída de erro do container, que `make logs-laravel` acompanha.
 
 ## Integração contínua
 

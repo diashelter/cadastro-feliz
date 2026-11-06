@@ -1,6 +1,6 @@
 # Arquitetura
 
-> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A stack Laravel responde `POST /users` e envia o e-mail pelo Horizon, por enquanto sem o outbox (decisão 21 de [decisions.md](decisions.md)); o que muda até lá está em [Limitações do fluxo sem outbox](#limitações-do-fluxo-sem-outbox). O relay e o outbox descritos aqui ainda não foram implementados em nenhuma stack, então este documento descreve o comportamento planejado para eles.
+> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A stack Laravel implementa o outbox e o relay descritos aqui. NestJS e Go ainda não os implementam, então para elas este documento descreve o comportamento planejado.
 
 ## O problema
 
@@ -85,7 +85,7 @@ Para cada mensagem, o worker:
 
 1. Carrega o evento pelo `event_id`.
 2. Ignora a mensagem se o status for terminal (`processed` ou `failed`).
-3. Envia o e-mail com `Message-ID` derivado do `event_id`.
+3. Envia o e-mail com o `Message-ID` `<event_id>@cadastro-feliz.local`, igual nas três stacks (decisão 22).
 4. Marca o evento como `processed`.
 
 O worker não segura lock nem transação durante o envio SMTP.
@@ -112,16 +112,17 @@ Com os valores padrão (base de 30 segundos e 5 tentativas), as esperas são de 
 
 Republicar uma mensagem perdida não conta como tentativa, porque nenhum envio falhou.
 
-## Limitações do fluxo sem outbox
+## Antes e depois do outbox
 
-Enquanto a stack Laravel não tem o outbox (decisão 21), gravar o usuário e publicar o job são duas escritas sem transação comum, e o e-mail pode se perder com o usuário já gravado. Os três primeiros casos são provados pelos testes de `tests/infra/limitations.sh`, que afirmam o comportamento de hoje e se invertem na rodada do outbox.
+A stack Laravel nasceu sem o outbox, para a perda do e-mail ser observada antes de corrigida (decisão 21). Os testes de `tests/infra/outbox.sh` afirmavam a perda e agora afirmam a correção, com os mesmos ids.
 
-| Caso | O que acontece | Cenário que passa a cobrir |
-|---|---|---|
-| Redis da fila parado no cadastro | A API responde `201`, o erro fica só no log e o job nunca existe. Com o Redis de volta, nenhum e-mail sai, e repetir o cadastro responde `409`. | Cenário 8 |
-| `horizon` parado e a stack derrubada | O job só existia no Redis, descartado com a stack. O worker volta sem nada para fazer, e nenhum e-mail sai. | Cenário 6 |
-| SMTP fora até esgotar as tentativas | O job vira uma falha só no Horizon, sem registro no PostgreSQL. Com o SMTP de volta, nenhum e-mail sai. | Cenário 5 |
-| API cai entre gravar e publicar | Mesma consequência do primeiro caso, sem nem o log. Fica só neste registro, porque reproduzi-la exigiria alterar o código. | Cenário 4 |
+| Caso | Sem outbox | Com outbox | Prova |
+|---|---|---|---|
+| Fila parada no cadastro | `201`, e o e-mail nunca sai; repetir o cadastro dá `409` | `201`, evento `pending`, e o e-mail sai quando a fila volta; repetir dá `409`, sem segundo e-mail | LM1, cenário 8 |
+| `horizon` parado e a stack derrubada | O job só existia no Redis, e o e-mail nunca sai | O evento `published` sobrevive, e o e-mail sai depois da republicação | LM2, cenário 6 |
+| SMTP fora até esgotar as tentativas | A falha fica só no Horizon, sem registro no PostgreSQL, e o e-mail nunca sai | `failed`, com `attempts` e `last_error`; nada sai sozinho, e o [reprocessamento manual](database.md#reprocessar-um-evento-em-failed) entrega o e-mail | LM3 |
+| SMTP volta antes de esgotar as tentativas | O e-mail sai pelas retentativas do Horizon | `attempts` sobe no banco, e o e-mail sai | RG26, cenário 5 |
+| API cai entre as duas escritas | Usuário gravado e e-mail perdido, sem nem o log | A janela não existe, porque as escritas são uma só transação | OB4, cenário 4 |
 
 ## Garantias e limites
 

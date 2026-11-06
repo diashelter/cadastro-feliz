@@ -27,6 +27,7 @@
 | [19](#19-get-health-comum-às-três-stacks) | `GET /health` comum às três stacks | Definida |
 | [20](#20-código-da-stack-laravel-copiado-pelo-compose-watch) | Código da stack Laravel copiado pelo Compose Watch | Definida |
 | [21](#21-stack-laravel-sem-outbox-até-a-rodada-do-outbox) | Stack Laravel sem outbox até a rodada do outbox | Definida |
+| [22](#22-message-id-derivado-do-evento) | `Message-ID` derivado do evento | Proposta |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -96,7 +97,6 @@ Se o contador estiver fora do ar, a API não consegue aplicar o limite. Retornar
 
 Cada fila tem um mecanismo próprio de retentativa, com comportamentos diferentes. Com `attempts` e `available_at` na tabela, as três stacks seguem exatamente a mesma regra, e o estado de cada evento pode ser consultado com SQL.
 
-**Suspensa na stack Laravel** até a rodada do outbox: sem evento no banco, as retentativas são as nativas do Horizon, com os mesmos valores (decisão 21).
 
 ## 10. Fila transporta só o identificador do evento
 
@@ -240,11 +240,13 @@ O código chega ao `php-fpm` só por cópia, nunca por bind mount. A imagem leva
 
 ## 21. Stack Laravel sem outbox até a rodada do outbox
 
+**Encerrada** pela rodada do outbox. O texto abaixo registra o estado da stack até então, e o resultado da comparação está em [Antes e depois do outbox](architecture.md#antes-e-depois-do-outbox).
+
 A stack Laravel entrega `POST /users` primeiro sem o outbox: grava em `users` e depois publica o job no Redis do Horizon, como duas escritas sem transação comum. Se a publicação falhar, o usuário fica gravado, a API responde `201` e o erro vai para o log, então o e-mail se perde sem que o cliente saiba. `users_outbox` continua existindo e sem linhas. O contrato continua descrevendo o alvo, e esta decisão termina na rodada do outbox. O detalhamento está no [design](../.design/laravel-registration-email.md).
 
 **Motivos**
 - **Observar antes de corrigir:** o problema só estava descrito em texto, e a rodada do outbox não teria um "antes" para comparar.
-- **Prova pela inversão:** os testes de `tests/infra/limitations.sh` afirmam a perda de hoje. Quando o outbox chegar, eles se invertem e provam a correção.
+- **Prova pela inversão:** os testes de `tests/infra/limitations.sh`, hoje `tests/infra/outbox.sh`, afirmavam a perda. Com o outbox, eles se inverteram e provam a correção.
 - **Sem recomeçar:** a publicação fica em um único ponto, o `WelcomeEmailPublisher`, para a rodada do outbox trocá-la sem mexer em validação, limites ou resposta.
 
 **Alternativas descartadas**
@@ -255,3 +257,13 @@ A stack Laravel entrega `POST /users` primeiro sem o outbox: grava em `users` e 
 - Até a rodada do outbox, um `201` da stack Laravel não garante o envio do e-mail, e [architecture.md](architecture.md#limitações-do-fluxo-sem-outbox) registra quando ele se perde.
 - As retentativas ficam no Horizon, e a decisão 9 fica suspensa nessa stack.
 - NestJS e Go, quando chegarem, continuam seguindo o contrato, com o outbox.
+
+## 22. `Message-ID` derivado do evento
+
+Todo e-mail de boas-vindas sai com o `Message-ID` `<event_id>@cadastro-feliz.local`, com o domínio fixo nas três stacks. Um reenvio, mesmo por outra stack, sai com o mesmo identificador. O detalhamento está no [design](../.design/laravel-outbox.md).
+
+**Motivo:** a entrega é *at-least-once*, e o identificador estável torna visível uma duplicata, embora não a impeça.
+
+**Alternativa descartada:** derivar o domínio de `MAIL_FROM`, porque uma stack com outro remetente quebraria a identificação das duplicatas.
+
+**Custo:** o formato passa a ser um contrato entre as stacks, e mudá-lo depois obriga a mudar nas três.

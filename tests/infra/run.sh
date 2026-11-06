@@ -17,7 +17,7 @@ PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
 # Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh limitations.sh)
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh)
 
 # `--list` imprime os nomes, um por linha, sem tocar no Docker.
 if [ "${1:-}" = "--list" ]; then

@@ -1,6 +1,6 @@
 # Stacks
 
-> **Status:** em construção. A [stack Laravel](#laravel) existe, com `POST /users`, `GET /health` e o Horizon, por enquanto sem o outbox (decisão 21 de [decisions.md](decisions.md)). NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
+> **Status:** em construção. A [stack Laravel](#laravel) existe, com `POST /users`, `GET /health`, o relay e o Horizon. NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
 
 ## Visão geral
 
@@ -20,11 +20,11 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 |---|---|---|
 | `nginx` | Publica a API na porta 8080 e encaminha para o `php-fpm` | Existe |
 | `php-fpm` | Executa a API | Existe |
-| `scheduler` | Roda `schedule:work`, que dispara o relay a cada segundo | Chega com o outbox |
+| `scheduler` | Roda `schedule:work`, que dispara o relay a cada segundo | Existe |
 | `horizon` | Consome a fila `registration-emails` e envia os e-mails | Existe |
 | `redis` | Fila do Horizon, com `noeviction` e sem persistência | Existe |
 
-**O que já existe.** A stack roda Laravel 13 sobre PHP 8.5 e tem dois endpoints: [`GET /health`](api-contract.md#get-health) e `POST /users`, com validação, limites, forma única de erro e CORS. Cada cadastro grava em `users` e publica `SendWelcomeEmailJob` no `redis`, sem transação comum entre as duas escritas (decisão 21), e o `horizon` envia o e-mail. O `scheduler` chega com o outbox, porque sem o relay não há o que agendar.
+**O que já existe.** A stack roda Laravel 13 sobre PHP 8.5 e tem dois endpoints: [`GET /health`](api-contract.md#get-health) e `POST /users`, com validação, limites, forma única de erro e CORS. Cada cadastro grava em `users` e `users_outbox` na mesma transação, o `scheduler` publica o evento no `redis`, e o `horizon` envia o e-mail.
 
 - **Módulos:** cada módulo é um pacote `modules/<nome>` em `app-modules`, carregado pelo `internachi/modular`, com o namespace `Modules\`. Nenhum módulo tem migrations (decisão 2).
 
@@ -33,11 +33,13 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - **Testes:** Pest, em `app-modules/<nome>/tests`, rodando com `make test-laravel` num container descartável, com dependências simuladas. O comportamento contra PostgreSQL, Redis e Mailpit reais fica em `tests/infra`.
 - **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
 
-**Como o outbox vai funcionar aqui**
-- **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`. Ele faz a seleção do lote e o `dispatch` de `SendRegistrationEmailJob`.
-- **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco. Até lá, ele usa as retentativas nativas do Horizon, com os mesmos valores (decisão 21).
+**Como o outbox funciona aqui**
+- **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`, com a saída enviada ao log do container. Ele faz a seleção do lote e o `dispatch` de `SendWelcomeEmailJob`. O cache da stack é `array`, então `withoutOverlapping()` só vale dentro de um processo: quem impede duas execuções de publicar a mesma linha é o `SKIP LOCKED`.
+- **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco.
+- **Limites de tempo:** 5 s do SMTP, 60 s do `timeout` do Horizon, 90 s do `retry_after` e 300 s de `OUTBOX_REPUBLISH_AFTER_SECONDS`, nessa ordem. Assim, um SMTP travado conta como tentativa, e um envio em andamento não é republicado.
 
 **Pontos de atenção**
+- A saída de uma tarefa agendada não chega a `docker logs` sem `appendOutputTo`.
 - A documentação do Laravel recomenda que tarefas por segundo sejam rápidas e deleguem o trabalho pesado a jobs. O relay segue isso: só publica, e o SMTP fica no job.
 - Remover o prefixo padrão `/api`, para a rota ser `/users`, e incluir essa rota na configuração de CORS.
 - Manter `after_commit` desligado na conexão da fila, para o `dispatch` acontecer antes do commit do relay, como nas outras stacks.
@@ -62,23 +64,25 @@ apis/laravel/
     │   ├── src/Checks/
     │   ├── src/Http/Controllers/HealthController.php
     │   └── tests/
-    ├── users/                # POST /users e o e-mail de boas-vindas
-    │   ├── resources/lua/    # cópias dos scripts do contrato
+    ├── outbox/               # o evento, o relay e o e-mail de boas-vindas
     │   ├── resources/views/
-    │   ├── routes/users-routes.php
-    │   ├── src/Actions/RegisterUserAction.php
-    │   ├── src/Http/Controllers/UserController.php
-    │   ├── src/Http/Requests/StoreUserRequest.php
+    │   ├── src/Console/Commands/RelayOutboxCommand.php
     │   ├── src/Jobs/SendWelcomeEmailJob.php
     │   ├── src/Mail/WelcomeMail.php
-    │   ├── src/Models/User.php
-    │   ├── src/Repositories/UserRepository.php
-    │   ├── src/Services/RegistrationLimiter.php
-    │   ├── src/Services/WelcomeEmailPublisher.php
+    │   ├── src/Models/UserOutboxEvent.php
+    │   ├── src/Repositories/OutboxRepository.php
+    │   ├── src/Services/RetryPolicy.php
     │   └── tests/
-    └── outbox/               # planejado
-        ├── src/Console/RelayOutboxCommand.php
-        └── src/Models/UserOutboxEvent.php
+    └── users/                # POST /users, com os limites
+        ├── resources/lua/    # cópias dos scripts do contrato
+        ├── routes/users-routes.php
+        ├── src/Actions/RegisterUserAction.php
+        ├── src/Http/Controllers/UserController.php
+        ├── src/Http/Requests/StoreUserRequest.php
+        ├── src/Models/User.php
+        ├── src/Repositories/UserRepository.php
+        ├── src/Services/RegistrationLimiter.php
+        └── tests/
 ```
 
 ## NestJS

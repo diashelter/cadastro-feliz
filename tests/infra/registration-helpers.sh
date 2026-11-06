@@ -1,9 +1,10 @@
-# Ajudantes de registration.sh e limitations.sh, que também rodam sozinhos, como no CI.
+# Ajudantes de registration.sh e outbox.sh, que também rodam sozinhos, como no CI.
 
 RG_NG=cadastro-feliz-laravel-nginx-1
 RG_FPM=cadastro-feliz-laravel-php-fpm-1
 RG_HZ=cadastro-feliz-laravel-horizon-1
 RG_RD=cadastro-feliz-laravel-redis-1
+RG_SC=cadastro-feliz-laravel-scheduler-1
 RG_WATCH_PID=
 
 rg_wait_for() {
@@ -18,7 +19,10 @@ rg_shared_back() { rg_wait_for 60 shared_healthy; }
 rg_reset() {
   psql_q 'truncate users cascade' >/dev/null
   redis_q FLUSHALL >/dev/null
-  docker exec "$RG_RD" redis-cli FLUSHALL >/dev/null
+  # Só as chaves da fila: um FLUSHALL logo depois de o horizon subir apaga o registro dos
+  # supervisores, e o master fica sem processar nada, ainda healthy.
+  docker exec "$RG_RD" redis-cli DEL queues:registration-emails queues:registration-emails:reserved \
+    queues:registration-emails:delayed queues:registration-emails:notify >/dev/null
   curl -s -X DELETE --max-time 10 localhost:8025/api/v1/messages >/dev/null
   curl -s -X DELETE --max-time 10 localhost:8080/horizon/api/jobs/failed >/dev/null
   return 0
@@ -44,6 +48,13 @@ rg_timed_post() {
 rg_under_3s() { awk -v s="$1" 'BEGIN { exit !(s < 3) }'; }
 
 rg_users() { psql_q 'select count(*) from users'; }
+rg_events() { psql_q 'select count(*) from users_outbox'; }
+# rg_event <coluna> <e-mail>: o valor de uma coluna do evento de um e-mail.
+rg_event() { psql_q "select $1 from users_outbox where payload->>'email' = '$2'"; }
+rg_event_is() { [ "$(rg_event status "$2")" = "$1" ]; }
+rg_queue_len() { docker exec "$RG_RD" redis-cli LLEN queues:registration-emails; }
+rg_queue_has() { [ "$(rg_queue_len)" -ge "${1:-1}" ]; }
+rg_failed_jobs() { curl -s --max-time 10 localhost:8080/horizon/api/jobs/failed | jq -r '.jobs | length'; }
 rg_user_exists() { [ "$(psql_q "select count(*) from users where email = '$1'")" = 1 ]; }
 rg_quota_value() {
   local key
@@ -69,5 +80,5 @@ rg_set_env() {
   mkq up-laravel
 }
 rg_default_env() {
-  rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=30
+  rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=30 OUTBOX_REPUBLISH_AFTER_SECONDS=300 OUTBOX_BATCH_SIZE=100
 }

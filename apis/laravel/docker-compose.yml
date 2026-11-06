@@ -31,6 +31,8 @@ x-app-env: &app-env
   REGISTRATION_ATTEMPT_WINDOW_SECONDS: ${REGISTRATION_ATTEMPT_WINDOW_SECONDS}
   REGISTRATION_MAX_PER_IP: ${REGISTRATION_MAX_PER_IP}
   REGISTRATION_IP_WINDOW_SECONDS: ${REGISTRATION_IP_WINDOW_SECONDS}
+  OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE}
+  OUTBOX_REPUBLISH_AFTER_SECONDS: ${OUTBOX_REPUBLISH_AFTER_SECONDS}
   OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS}
   OUTBOX_BACKOFF_BASE_SECONDS: ${OUTBOX_BACKOFF_BASE_SECONDS}
 
@@ -45,7 +47,7 @@ services:
     dns_opt: ["timeout:1", "attempts:1"]
     environment:
       <<: *app-env
-      # A publicação na fila desiste em 1 s, sem retentar: o 201 não espera o Redis.
+      # POST /users não toca na fila; só o painel do Horizon a lê, e desiste em 1 s.
       REDIS_TIMEOUT: "1"
       REDIS_READ_TIMEOUT: "1"
       REDIS_MAX_RETRIES: "0"
@@ -96,6 +98,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      # O rebuild do watch recria todo serviço com esta imagem, mas só inicia o php-fpm e o
+      # que depende dele: sem isto, o horizon ficaria parado em Created.
+      php-fpm:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "php", "artisan", "horizon:status"]
@@ -117,8 +123,52 @@ services:
           path: ./config
           target: /var/www/html/config
 
-  # Só a fila, separada do redis-limiter (decisão 5). Sem persistência: a fila é descartada
-  # com a stack, e essa perda é uma das limitações em estudo (decisão 21).
+  # O relay: dispara outbox:relay a cada segundo. A mesma imagem do php-fpm, sem build próprio.
+  # O schedule:work só dispara na virada do minuto: o schedule:run inicial cobre esse intervalo,
+  # para um container novo não ficar até 60 s sem publicar. Cada execução é um processo novo,
+  # então o watch só copia o código. O init repassa o sinal de parada, que o PHP ignoraria como PID 1.
+  scheduler:
+    image: cadastro-feliz-laravel-php-fpm
+    command: ["sh", "-c", "php artisan schedule:run & exec php artisan schedule:work"]
+    init: true
+    dns_opt: ["timeout:1", "attempts:1"]
+    environment:
+      <<: *app-env
+      # A publicação desiste em 1 s, sem retentar: uma fila travada não segura o lote aberto.
+      REDIS_TIMEOUT: "1"
+      REDIS_READ_TIMEOUT: "1"
+      REDIS_MAX_RETRIES: "0"
+    depends_on:
+      redis:
+        condition: service_healthy
+      # Como no horizon: sem isto, o rebuild do watch o deixaria parado em Created.
+      php-fpm:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan schedule:list | grep -q outbox:relay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /var/www/html/app
+        - action: sync
+          path: ./app-modules
+          target: /var/www/html/app-modules
+        - action: sync
+          path: ./config
+          target: /var/www/html/config
+        - action: sync
+          path: ./routes
+          target: /var/www/html/routes
+
+  # Só a fila, separada do redis-limiter (decisão 5). Sem persistência: a fila é descartada com
+  # a stack, e o outbox republica o que se perdeu.
   redis:
     image: redis:8.10.3-alpine
     command:

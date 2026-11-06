@@ -152,6 +152,48 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: tests/infra/laravel.sh t_lv45_no_table_defaults (C45) (laravel)
 - last seen: 2026-11-04T23:17:51Z
 
+### L-024 - A claim that a record keeps its status is proven by reading the status, not only its counters.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: C38 tests/infra/outbox.sh t_ob38_database_down (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-025 - A deadline in a criterion is asserted as elapsed time; a retry loop whose rounds add up past it passes late results.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: C42 tests/infra/registration.sh t_rg27_watch_updates_worker (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-026 - A deadline is measured from the event that starts it, not after waits for other services to become healthy.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: C43 tests/infra/outbox.sh t_lm1_queue_down (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-027 - A claim that containers were recreated compares each container id, and the change under test must really produce a new image.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `laravel` · harmful: 0
+- features: laravel-outbox
+- evidence: C56 tests/infra/laravel.sh rebuild_on (laravel) (laravel)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-028 - A fail-fast setting is proven with the dependency frozen, in the container that holds the setting; a stopped service fails too fast to show it.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: door 6 tests/infra/outbox.sh t_ob40_frozen_queue_relay (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-029 - A startup-latency claim is measured away from the natural trigger, or the slower path passes by timing.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: door 9 tests/infra/outbox.sh t_ob41_scheduler_start (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
+### L-030 - A loop that samples a condition must assert it sampled at least once, or it passes without observing anything.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: laravel-outbox
+- evidence: C37 tests/infra/outbox.sh t_ob37_no_transaction (infra) (infra)
+- last seen: 2026-11-06T03:38:55Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
