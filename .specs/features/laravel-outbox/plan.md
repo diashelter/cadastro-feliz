@@ -137,6 +137,8 @@ Um container publica os eventos prontos a cada segundo, sem publicar a mesma lin
 25. WHILE o `scheduler` está parado, WHEN um cadastro responde `201` THEN o evento SHALL ficar `pending`; WHEN o `scheduler` volta THEN o e-mail SHALL chegar em até 60 s
 26. WHILE `make watch-laravel` roda, WHEN `RelayOutboxCommand` muda THEN `php artisan outbox:relay` no `scheduler` SHALL imprimir o texto novo em até 15 s, com o mesmo ID de container
 56. WHILE `make watch-laravel` roda, WHEN `composer.json`, `composer.lock` ou `docker/php` muda THEN `php-fpm`, `scheduler` e `horizon` SHALL estar recriados, na mesma imagem nova e `healthy`, em até 180 s
+57. IF o `redis` da stack está pausado THEN `php artisan outbox:relay` no `scheduler` SHALL sair com `1` em menos de 3 s, com o evento `pending` e `published_at` nulo; WHEN o `redis` é despausado THEN o e-mail SHALL chegar em até 60 s
+58. WHEN o `scheduler` é iniciado a mais de 20 s da virada do minuto THEN um evento pronto SHALL ficar `published` em até 10 s, e `docker stop` do `scheduler` SHALL levar menos de 8 s
 
 ### S3: Worker sobre o evento (P1)
 

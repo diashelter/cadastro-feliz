@@ -58,10 +58,10 @@ t_lm1_queue_down() {
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; ok=1; }
   rg_event_is pending ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
   docker start "$RG_RD" >/dev/null
-  rg_wait_for 60 rg_healthy "$RG_RD"
-  rg_wait_for 90 rg_healthy "$RG_HZ" || { note "horizon: $(health "$RG_HZ")"; ok=1; }
+  # O prazo de 60 s conta de quando a fila volta.
   rg_wait_for 60 rg_mail_arrived ana@example.com || { note "o e-mail não chegou"; ok=1; }
   rg_wait_for 10 rg_event_is processed ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  rg_wait_for 90 rg_healthy "$RG_HZ" || { note "horizon: $(health "$RG_HZ")"; ok=1; }
   [ "$(rg_register ana@example.com)" = 409 ] || { note "repetir: $(rg_body)"; ok=1; }
   sleep 5
   [ "$(rg_mail_count ana@example.com)" = 1 ] || { note "mensagens: $(rg_mail_count ana@example.com)"; ok=1; }
@@ -391,7 +391,7 @@ t_ob21_failure() {
   docker stop "$RG_HZ" "$RG_RD" >/dev/null
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ob_seed ana@example.com >/dev/null
-  docker exec "$RG_FPM" php artisan outbox:relay >/dev/null 2>&1
+  docker exec "$RG_SC" php artisan outbox:relay >/dev/null 2>&1
   rc=$?
   [ "$rc" = 1 ] || { note "saída do comando: $rc"; ok=1; }
   # Em duas etapas: com pipefail, o grep -q que sai antes daria SIGPIPE no docker logs.
@@ -407,6 +407,47 @@ t_ob21_failure() {
   return $ok
 }
 check "OB21 relay failure keeps events and logs" t_ob21_failure
+
+t_ob40_frozen_queue_relay() {
+  local ok=0 rc started elapsed resumed
+  rg_reset
+  docker pause "$RG_RD" >/dev/null
+  ob_seed ana@example.com >/dev/null
+  started=$SECONDS
+  docker exec "$RG_SC" php artisan outbox:relay >/dev/null 2>&1
+  rc=$?
+  elapsed=$((SECONDS - started))
+  [ "$rc" = 1 ] || { note "saída do comando: $rc"; ok=1; }
+  [ "$elapsed" -lt 3 ] || { note "levou ${elapsed}s"; ok=1; }
+  rg_event_is pending ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  [ "$(rg_event 'published_at is null' ana@example.com)" = t ] || { note "published_at preenchido"; ok=1; }
+  docker unpause "$RG_RD" >/dev/null
+  resumed=$SECONDS
+  rg_wait_for 60 rg_mail_arrived ana@example.com || { note "o e-mail não chegou"; ok=1; }
+  [ $((SECONDS - resumed)) -le 60 ] || { note "levou $((SECONDS - resumed)) s"; ok=1; }
+  rg_wait_for 90 rg_healthy "$RG_HZ"
+  return $ok
+}
+check "OB40 frozen queue fails the relay fast" t_ob40_frozen_queue_relay
+
+# Longe da virada do minuto: só o schedule:work, sem o schedule:run inicial, não dispararia.
+t_ob41_scheduler_start() {
+  local ok=0 started
+  rg_reset
+  docker stop "$RG_HZ" >/dev/null
+  started=$SECONDS
+  docker stop "$RG_SC" >/dev/null
+  [ $((SECONDS - started)) -lt 8 ] || { note "docker stop levou $((SECONDS - started)) s"; ok=1; }
+  ob_seed ana@example.com >/dev/null
+  until [ "$(date +%-S)" -ge 5 ] && [ "$(date +%-S)" -le 30 ]; do sleep 1; done
+  docker start "$RG_SC" >/dev/null
+  rg_wait_for 10 rg_event_is published ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  docker start "$RG_HZ" >/dev/null
+  rg_wait_for 90 rg_healthy "$RG_SC"
+  rg_wait_for 90 rg_healthy "$RG_HZ"
+  return $ok
+}
+check "OB41 scheduler publishes right after it starts" t_ob41_scheduler_start
 
 t_ob22_resumes() {
   local sc
@@ -632,7 +673,7 @@ t_ob36_frozen_smtp() {
 check "OB36 frozen smtp counts as a failure" t_ob36_frozen_smtp
 
 t_ob37_no_transaction() {
-  local ok=0 id i open
+  local ok=0 id i open probes=0
   rg_reset
   docker pause "$OB_MAILPIT" >/dev/null
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; ok=1; }
@@ -641,6 +682,7 @@ t_ob37_no_transaction() {
   id="$(rg_event id ana@example.com)"
   for i in $(seq 1 30); do
     [ "$(rg_event attempts ana@example.com)" -ge 1 ] && break
+    probes=$((probes + 1))
     open="$(psql_q "select count(*) from pg_stat_activity where state like 'idle in transaction%'")"
     [ "$open" = 0 ] || { note "transação aberta: $open"; ok=1; }
     docker exec "$OB_PG" psql -U cadastro_feliz -d cadastro_feliz -v ON_ERROR_STOP=1 -c \
@@ -649,6 +691,7 @@ t_ob37_no_transaction() {
     sleep 0.5
   done
   [ "$(rg_event attempts ana@example.com)" -ge 1 ] || { note "o envio não terminou"; ok=1; }
+  [ "$probes" -ge 2 ] || { note "só $probes sondas durante o envio"; ok=1; }
   docker unpause "$OB_MAILPIT" >/dev/null
   rg_shared_back
   docker start "$RG_SC" >/dev/null
@@ -658,20 +701,26 @@ t_ob37_no_transaction() {
 check "OB37 worker holds no transaction during send" t_ob37_no_transaction
 
 t_ob38_database_down() {
-  local ok=0
+  local ok=0 published_at
   rg_set_env OUTBOX_REPUBLISH_AFTER_SECONDS=10 || { note "make up-laravel saiu com erro"; return 1; }
   rg_reset
   docker stop "$RG_HZ" >/dev/null
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; ok=1; }
   rg_wait_for 15 rg_event_is published ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  # Sem o relay, nada republica antes de o evento ser lido, com o banco de volta.
+  docker stop "$RG_SC" >/dev/null
+  published_at="$(rg_event published_at ana@example.com)"
   docker stop "$OB_PG" >/dev/null
   docker start "$RG_HZ" >/dev/null
   ob_job_failed() { [ "$(rg_failed_jobs)" -ge 1 ]; }
   rg_wait_for 90 ob_job_failed || { note "o job não falhou no Horizon"; ok=1; }
   docker start "$OB_PG" >/dev/null
   rg_shared_back
+  rg_event_is published ana@example.com || { note "com o banco de volta: $(rg_event status ana@example.com)"; ok=1; }
+  [ "$(rg_event published_at ana@example.com)" = "$published_at" ] || { note "published_at mudou"; ok=1; }
   [ "$(rg_event attempts ana@example.com)" = 0 ] || { note "attempts: $(rg_event attempts ana@example.com)"; ok=1; }
   [ "$(rg_mail_count ana@example.com)" = 0 ] || { note "saiu com o banco fora"; ok=1; }
+  docker start "$RG_SC" >/dev/null
   rg_wait_for 90 rg_mail_arrived ana@example.com || { note "o e-mail não chegou"; ok=1; }
   rg_default_env
   return $ok

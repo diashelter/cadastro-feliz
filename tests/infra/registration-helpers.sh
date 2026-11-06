@@ -19,7 +19,10 @@ rg_shared_back() { rg_wait_for 60 shared_healthy; }
 rg_reset() {
   psql_q 'truncate users cascade' >/dev/null
   redis_q FLUSHALL >/dev/null
-  docker exec "$RG_RD" redis-cli FLUSHALL >/dev/null
+  # Só as chaves da fila: um FLUSHALL logo depois de o horizon subir apaga o registro dos
+  # supervisores, e o master fica sem processar nada, ainda healthy.
+  docker exec "$RG_RD" redis-cli DEL queues:registration-emails queues:registration-emails:reserved \
+    queues:registration-emails:delayed queues:registration-emails:notify >/dev/null
   curl -s -X DELETE --max-time 10 localhost:8025/api/v1/messages >/dev/null
   curl -s -X DELETE --max-time 10 localhost:8080/horizon/api/jobs/failed >/dev/null
   return 0

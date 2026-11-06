@@ -399,7 +399,7 @@ t_rg26_smtp_returns() {
 check "RG26 mail arrives after smtp returns" t_rg26_smtp_returns
 
 t_rg27_watch_updates_worker() {
-  local before i ok=0 view="$WORK/apis/laravel/app-modules/outbox/resources/views/welcome-text.blade.php" saved found=1 pid
+  local before i started ok=0 view="$WORK/apis/laravel/app-modules/outbox/resources/views/welcome-text.blade.php" saved found=1 pid
   saved="$(cat "$view")"
   rg_reset
   before="$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")"
@@ -409,13 +409,16 @@ t_rg27_watch_updates_worker() {
   set +m
   rg_wait_for 300 grep -q 'Watch enabled' "$WORK/watch.log" || { note "watch não ficou pronto: $(tail -3 "$WORK/watch.log")"; ok=1; }
   printf 'Texto novo vindo do watch.\n' >> "$view"
-  for i in $(seq 1 12); do
+  started=$SECONDS
+  i=0
+  while [ $((SECONDS - started)) -le 60 ]; do
+    i=$((i + 1))
     sleep 5
     rg_register "w$i@example.com" >/dev/null
     rg_wait_for 8 rg_mail_arrived "w$i@example.com" \
-      && rg_mail_field "w$i@example.com" '.Text' | grep -qF 'Texto novo vindo do watch.' && { found=0; break; }
+      && grep -qF 'Texto novo vindo do watch.' <<< "$(rg_mail_field "w$i@example.com" '.Text')" && { found=0; break; }
   done
-  [ "$found" = 0 ] || { note "texto novo não saiu em 60 s"; ok=1; }
+  [ "$found" = 0 ] && [ $((SECONDS - started)) -le 60 ] || { note "texto novo não saiu em 60 s: $((SECONDS - started)) s"; ok=1; }
   [ "$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")" = "$before" ] || { note "php-fpm mudou"; ok=1; }
   kill -INT -- "-$pid" 2>/dev/null
   rg_wait_for 30 bash -c "! kill -0 $pid 2>/dev/null"

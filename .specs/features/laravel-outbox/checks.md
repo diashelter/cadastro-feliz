@@ -5,7 +5,7 @@ Run laravel: `make test-laravel`
 Run infra: `bash tests/infra/run.sh`
 Plan: `.specs/features/laravel-outbox/plan.md`
 
-56 checks in 5 slices · 10 one-way doors · 0 open, of which 0 block
+58 checks in 5 slices · 10 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -97,6 +97,12 @@ Proof: run infra | PASS OB25 events wait for the scheduler
 
 **C26** - Com o watch, uma edição de `RelayOutboxCommand` chega ao `scheduler` em até 15 s, com o mesmo ID (AC 26)
 Proof: run infra | PASS OB26 watch updates the relay
+**C57** - Com o `redis` pausado, `outbox:relay` no `scheduler` sai com `1` em menos de 3 s, o evento fica `pending`, com `published_at` nulo, e com o `redis` despausado o e-mail chega em até 60 s (AC 57)
+Proof: run infra | PASS OB40 frozen queue fails the relay fast
+
+**C58** - Longe da virada do minuto, um `scheduler` recém-iniciado publica um evento pronto em até 10 s, e `docker stop` dele leva menos de 8 s (AC 58)
+Proof: run infra | PASS OB41 scheduler publishes right after it starts
+
 **C56** - Com o watch, uma mudança em `composer.json`, `composer.lock` ou `docker/php` deixa `php-fpm`, `scheduler` e `horizon` recriados, na mesma imagem nova e `healthy`, em até 180 s (AC 56)
 Proof: run infra | PASS LV25 watch rebuilds on composer.json
 Proof: run infra | PASS LV25 watch rebuilds on composer.lock
@@ -208,7 +214,7 @@ Proof: run infra | PASS RD5 readme states the outbox
 
 | Set (size) | Member -> proof | Unproven |
 | --- | --- | --- |
-| doors do plano (10) | 1 `payload` C1 · C2 · 2 ciclo e retentativas C33 · C34 · C35 · 3 job C30 · C40 · 4 `Message-ID` C29 · C40 · 5 módulo C10 · C11 · 6 `scheduler` C12 · C13 · C21 · C26 · 7 limites C36 · C39 · 8 prova e registro C43 · C44 · C46 · C49 · C51 · 9 início do `scheduler` C25 · C45 · 10 rebuild do watch C56 | - |
+| doors do plano (10) | 1 `payload` C1 · C2 · 2 ciclo e retentativas C33 · C34 · C35 · 3 job C30 · C40 · 4 `Message-ID` C29 · C40 · 5 módulo C10 · C11 · 6 `scheduler` C12 · C13 · C21 · C26 · C57 · 7 limites C36 · C39 · 8 prova e registro C43 · C44 · C46 · C49 · C51 · 9 início do `scheduler` C58 · 10 rebuild do watch C56 | - |
 | transições do ciclo (10) | `[*]`→`pending` C1 · `pending`→`published` C15 · `published`→`published` C17 · `published`→`processed` C27 · `published`→`pending` C33 · `published`→`failed` C34 · `pending`→`processed` C24 · `pending`→`pending` C23 · `pending`→`failed` C31 · `failed`→`pending` C35 | - |
 | prontidão do relay (4) | `pending` vencido C15 · `pending` futuro C16 · `published` expirado C17 · terminal C18 | - |
 | exemplos da espera, AC 33 (2) | `0`→30 s C33 · `3`→240 s C33 | - |
@@ -226,16 +232,16 @@ Proof: run infra | PASS RD5 readme states the outbox
 - failure modes: C4, C21, C23, C33, C34, C36, C38
 - idempotency: C23, C31, C43 - mensagens repetidas não reenviam e-mail de evento terminal; a duplicata depois do envio é a limitação *at-least-once* aceita, identificável por C29
 - authorization: existing - cadastro público com limites (RG9, RG13) e painel só em `local` (`denies the horizon panel outside local`); o relay não tem caller externo
-- concurrency: C7, C20, C24
+- concurrency: C7, C20, C24, C37
 - data lifecycle: C2, C44, C45 - os eventos sobrevivem à stack; não há backfill nem limpeza, como em Out of scope
-- dependency failure: C5, C6, C8, C21, C22, C25, C36, C38
+- dependency failure: C5, C6, C8, C21, C22, C25, C36, C38, C57
 - state transitions: C1, C15, C17, C18, C24, C27, C31, C33, C34, C35
 - observability: C21, C32, C33, C34 - falha do relay no log do `scheduler`; falha de envio em `last_error`
 
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
+- **Dispatched:** Verifier, em `bcff9f4`, returned
 - **Boundary:** C1-C56 closed at `9dd582d`
 - **Abandoned:** o `scheduler` só com `schedule:work`, trocado na door 9, porque ele dispara apenas na virada do minuto. OB24 atrasa o `COMMIT` em 8 s, mais que os 3 s do critério, porque o worker pode dormir 3 s com a fila vazia e a mensagem precisa chegar antes do `COMMIT`.
 - **Ambiente da prova:** Docker real no macOS, onde `tests/infra` depende de ferramentas GNU e do bash 4. As provas rodam com adaptadores fora do repositório para `sed -i`, `sed 1a`, `stat -c`, `timeout`, `tac`, `paste` e `mapfile`. O CI, em Linux, não precisa deles e ainda não rodou este branch, porque não houve push.

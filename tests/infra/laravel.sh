@@ -640,14 +640,20 @@ new_fpm_healthy() { local id; id="$(lv_id "$FPM")"; [ -n "$id" ] && [ "$id" != "
 
 # rebuild_on <nome> <arquivo> <comando que muda o arquivo>
 rebuild_on() {
-  local name="$1" file="$2" before ok=0; shift 2
+  local name="$1" file="$2" before hz sc image ok=0; shift 2
   before="$(lv_id "$FPM")"
+  hz="$(lv_id "$HZ")"
+  sc="$(lv_id "$SC")"
+  image="$(docker inspect -f '{{.Image}}' "$FPM")"
   watch_alive || { note "watch fora do ar"; return 1; }
   save "$file"
   "$@"
   wait_for 180 new_fpm_healthy "$before" \
     || { note "$name: php-fpm $(lv_id "$FPM" | cut -c1-12), $(health "$FPM"), horizon $(health "$HZ"), scheduler $(health "$SC")"; ok=1; }
-  # O worker e o relay voltam na imagem nova, não só o php-fpm.
+  # O worker e o relay voltam recriados e na imagem nova, não só o php-fpm.
+  [ "$(docker inspect -f '{{.Image}}' "$FPM")" != "$image" ] || { note "$name: a imagem não mudou"; ok=1; }
+  [ "$(lv_id "$HZ")" != "$hz" ] || { note "$name: horizon não foi recriado"; ok=1; }
+  [ "$(lv_id "$SC")" != "$sc" ] || { note "$name: scheduler não foi recriado"; ok=1; }
   [ "$(docker inspect -f '{{.Image}}' "$HZ")" = "$(docker inspect -f '{{.Image}}' "$FPM")" ] || { note "$name: horizon em outra imagem"; ok=1; }
   [ "$(docker inspect -f '{{.Image}}' "$SC")" = "$(docker inspect -f '{{.Image}}' "$FPM")" ] || { note "$name: scheduler em outra imagem"; ok=1; }
   before="$(lv_id "$FPM")"
@@ -657,7 +663,8 @@ rebuild_on() {
 }
 change_description() { jq '.description = "probe"' "$LV/composer.json.lvsave" > "$LV/composer.json"; }
 touch_lock() { printf '\n' >> "$LV/composer.lock"; }
-touch_dockerfile() { printf '# probe\n' >> "$LV/docker/php/Dockerfile"; }
+# Um comentário gera a mesma imagem; um LABEL no último estágio gera outra.
+touch_dockerfile() { printf 'LABEL probe=rebuild\n' >> "$LV/docker/php/Dockerfile"; }
 
 check "LV25 watch rebuilds on composer.json" rebuild_on composer.json "$LV/composer.json" change_description
 check "LV25 watch rebuilds on composer.lock" rebuild_on composer.lock "$LV/composer.lock" touch_lock
