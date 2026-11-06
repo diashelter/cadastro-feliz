@@ -1,4 +1,4 @@
-# POST /users, Horizon e o e-mail de boas-vindas (.specs/features/laravel-registration-email).
+# POST /users, Horizon e o e-mail de boas-vindas (.specs/features/laravel-registration-email e laravel-outbox).
 # Carregado por run.sh. Roda contra PostgreSQL, Redis, Horizon e Mailpit de verdade.
 
 # shellcheck source=/dev/null
@@ -35,10 +35,10 @@ t_rg2_normalizes() {
   status="$(rg_post '{"name":"  Ana  ","email":"  ANA@Example.COM "}')"
   [ "$status" = 201 ] || { note "status $status: $(rg_body)"; return 1; }
   [ "$(psql_q 'select name, email from users')" = 'Ana|ana@example.com' ] || { note "users: $(psql_q 'select name, email from users')"; ok=1; }
-  [ "$(psql_q 'select count(*) from users_outbox')" = 0 ] || { note "users_outbox tem linhas"; ok=1; }
+  [ "$(rg_events)" = 1 ] || { note "users_outbox: $(rg_events)"; ok=1; }
   return $ok
 }
-check "RG2 post users normalizes and skips outbox" t_rg2_normalizes
+check "RG2 post users normalizes and writes one event" t_rg2_normalizes
 
 # Um e-mail válido com exatamente N caracteres: parte local de 64, rótulos de até 60.
 rg_long_email() {
@@ -119,6 +119,7 @@ t_rg7_conflict() {
   [ "$(rg_register ANA@EXAMPLE.COM)" = 409 ] || { note "status: $(rg_body)"; ok=1; }
   [ "$(rg_body)" = "$CONFLICT_BODY" ] || { note "corpo: $(rg_body)"; ok=1; }
   [ "$(rg_users)" = 1 ] || { note "users: $(rg_users)"; ok=1; }
+  [ "$(rg_events)" = 1 ] || { note "users_outbox: $(rg_events)"; ok=1; }
   sleep 3
   [ "$(curl -s localhost:8080/horizon/api/stats | jq -r '.recentJobs')" = "$jobs_before" ] || { note "job novo depois do 409"; ok=1; }
   return $ok
@@ -217,6 +218,7 @@ t_rg15_parallel_quota() {
   limited="$(grep -c '^429$' <<< "$statuses")"
   [ "$created" = 20 ] && [ "$limited" = 30 ] || { note "201: $created, 429: $limited, todos: $(sort <<< "$statuses" | uniq -c | tr '\n' ' ')"; return 1; }
   [ "$(rg_users)" = 20 ] || { note "users: $(rg_users)"; return 1; }
+  [ "$(rg_events)" = 20 ] || { note "users_outbox: $(rg_events)"; return 1; }
 }
 check "RG15 ip quota holds in parallel" t_rg15_parallel_quota
 
@@ -270,16 +272,18 @@ t_rg18_database_down() {
 check "RG18 database down answers 500 and releases" t_rg18_database_down
 
 t_rg19_queue_down() {
-  local out code secs since logs before after ok=0
+  local out code secs since logs before after pending ok=0
   rg_reset
   rg_register ana@example.com >/dev/null
   before="$(rg_quota_value)"
-  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # --since tem resolução de segundo: a espera deixa de fora o log do teste anterior.
   sleep 1
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   docker stop "$RG_RD" >/dev/null
   out="$(rg_timed_post '{"name":"Bia","email":"bia@example.com"}')"
   code="${out% *}"; secs="${out#* }"
   after="$(rg_quota_value)"
+  pending="$(rg_event status bia@example.com)"
   logs="$(docker logs --since "$since" "$RG_FPM" 2>&1)"
   docker start "$RG_RD" >/dev/null
   rg_wait_for 60 rg_healthy "$RG_RD"
@@ -287,7 +291,8 @@ t_rg19_queue_down() {
   [ "$code" = 201 ] || { note "status $code: $(rg_body)"; ok=1; }
   rg_under_3s "$secs" || { note "levou ${secs}s"; ok=1; }
   rg_user_exists bia@example.com || { note "usuário não foi gravado"; ok=1; }
-  grep -qF SendWelcomeEmailJob <<< "$logs" || { note "log do php-fpm sem SendWelcomeEmailJob"; ok=1; }
+  [ "$pending" = pending ] || { note "evento: $pending"; ok=1; }
+  grep -qF '.ERROR' <<< "$logs" && { note "erro no log do php-fpm: $logs"; ok=1; }
   [ "$after" = "$((before + 1))" ] || { note "cota: antes $before, depois $after"; ok=1; }
   return $ok
 }
@@ -335,8 +340,10 @@ rg_with_queued_job() {
   rg_reset
   docker stop "$RG_HZ" >/dev/null
   rg_register secreta@example.com 'Nome Secreto' >/dev/null
+  rg_wait_for 15 rg_queue_has
   QUEUED="$(docker exec "$RG_RD" redis-cli LRANGE queues:registration-emails 0 -1)"
-  QUEUED_ID="$(jq -r '.data.id' "$WORK/r.body")"
+  QUEUED_USER="$(jq -r '.data.id' "$WORK/r.body")"
+  QUEUED_ID="$(rg_event id secreta@example.com)"
   docker start "$RG_HZ" >/dev/null
   rg_wait_for 90 rg_healthy "$RG_HZ"
 }
@@ -345,21 +352,23 @@ t_rg23_only_id() {
   local ok=0
   rg_with_queued_job
   [ -n "$QUEUED" ] || { note "fila vazia"; return 1; }
-  grep -qF "$QUEUED_ID" <<< "$QUEUED" || { note "job sem o id"; ok=1; }
+  [ -n "$QUEUED_ID" ] || { note "evento sem id"; return 1; }
+  grep -qF "$QUEUED_ID" <<< "$QUEUED" || { note "job sem o id do evento"; ok=1; }
+  grep -qF "$QUEUED_USER" <<< "$QUEUED" && { note "job com o id do usuário"; ok=1; }
   grep -qF 'secreta@example.com' <<< "$QUEUED" && { note "job com o e-mail"; ok=1; }
   grep -qF 'Nome Secreto' <<< "$QUEUED" && { note "job com o nome"; ok=1; }
   return $ok
 }
-check "RG23 job carries only the user id" t_rg23_only_id
+check "RG23 job carries only the event id" t_rg23_only_id
 
 t_rg24_retries() {
   local ok=0
   rg_with_queued_job
-  [ "$(jq -r '.maxTries' <<< "$QUEUED")" = 5 ] || { note "maxTries: $(jq -r '.maxTries' <<< "$QUEUED")"; ok=1; }
-  [ "$(jq -r '.backoff' <<< "$QUEUED")" = '30,60,120,240' ] || { note "backoff: $(jq -r '.backoff' <<< "$QUEUED")"; ok=1; }
+  [ "$(jq -r '.maxTries' <<< "$QUEUED")" = 1 ] || { note "maxTries: $(jq -r '.maxTries' <<< "$QUEUED")"; ok=1; }
+  [ "$(jq -r '.backoff' <<< "$QUEUED")" = null ] || { note "backoff: $(jq -r '.backoff' <<< "$QUEUED")"; ok=1; }
   return $ok
 }
-check "RG24 job retries use the defaults" t_rg24_retries
+check "RG24 job has no native retries" t_rg24_retries
 
 t_rg25_queue_restart() {
   rg_reset
@@ -377,17 +386,20 @@ t_rg26_smtp_returns() {
   rg_reset
   docker stop "$(container mailpit)" >/dev/null
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; ok=1; }
-  sleep 3
+  rg_attempts_rose() { [ "$(rg_event attempts ana@example.com)" -ge 1 ]; }
+  rg_wait_for 30 rg_attempts_rose || { note "attempts: $(rg_event attempts ana@example.com)"; ok=1; }
+  [ "$(rg_event status ana@example.com)" != failed ] || { note "esgotou antes de o SMTP voltar"; ok=1; }
   docker start "$(container mailpit)" >/dev/null
   rg_shared_back
   rg_wait_for 60 rg_mail_arrived ana@example.com || { note "e-mail não chegou"; ok=1; }
+  rg_wait_for 10 rg_event_is processed ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
   rg_default_env
   return $ok
 }
 check "RG26 mail arrives after smtp returns" t_rg26_smtp_returns
 
 t_rg27_watch_updates_worker() {
-  local before i ok=0 view="$WORK/apis/laravel/app-modules/users/resources/views/welcome-text.blade.php" saved found=1 pid
+  local before i ok=0 view="$WORK/apis/laravel/app-modules/outbox/resources/views/welcome-text.blade.php" saved found=1 pid
   saved="$(cat "$view")"
   rg_reset
   before="$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")"

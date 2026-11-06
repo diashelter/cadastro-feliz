@@ -5,7 +5,7 @@ Run laravel: `make test-laravel`
 Run infra: `bash tests/infra/run.sh`
 Plan: `.specs/features/laravel-outbox/plan.md`
 
-55 checks in 5 slices · 8 one-way doors · 0 open, of which 0 block
+56 checks in 5 slices · 10 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -97,6 +97,10 @@ Proof: run infra | PASS OB25 events wait for the scheduler
 
 **C26** - Com o watch, uma edição de `RelayOutboxCommand` chega ao `scheduler` em até 15 s, com o mesmo ID (AC 26)
 Proof: run infra | PASS OB26 watch updates the relay
+**C56** - Com o watch, uma mudança em `composer.json`, `composer.lock` ou `docker/php` deixa `php-fpm`, `scheduler` e `horizon` recriados, na mesma imagem nova e `healthy`, em até 180 s (AC 56)
+Proof: run infra | PASS LV25 watch rebuilds on composer.json
+Proof: run infra | PASS LV25 watch rebuilds on composer.lock
+Proof: run infra | PASS LV25 watch rebuilds on docker/php
 
 ### S3 - Worker sobre o evento
 
@@ -204,7 +208,7 @@ Proof: run infra | PASS RD5 readme states the outbox
 
 | Set (size) | Member -> proof | Unproven |
 | --- | --- | --- |
-| doors do plano (8) | 1 `payload` C1 · C2 · 2 ciclo e retentativas C33 · C34 · C35 · 3 job C30 · C40 · 4 `Message-ID` C29 · C40 · 5 módulo C10 · C11 · 6 `scheduler` C12 · C13 · C21 · C26 · 7 limites C36 · C39 · 8 prova e registro C43 · C44 · C46 · C49 · C51 | - |
+| doors do plano (10) | 1 `payload` C1 · C2 · 2 ciclo e retentativas C33 · C34 · C35 · 3 job C30 · C40 · 4 `Message-ID` C29 · C40 · 5 módulo C10 · C11 · 6 `scheduler` C12 · C13 · C21 · C26 · 7 limites C36 · C39 · 8 prova e registro C43 · C44 · C46 · C49 · C51 · 9 início do `scheduler` C25 · C45 · 10 rebuild do watch C56 | - |
 | transições do ciclo (10) | `[*]`→`pending` C1 · `pending`→`published` C15 · `published`→`published` C17 · `published`→`processed` C27 · `published`→`pending` C33 · `published`→`failed` C34 · `pending`→`processed` C24 · `pending`→`pending` C23 · `pending`→`failed` C31 · `failed`→`pending` C35 | - |
 | prontidão do relay (4) | `pending` vencido C15 · `pending` futuro C16 · `published` expirado C17 · terminal C18 | - |
 | exemplos da espera, AC 33 (2) | `0`→30 s C33 · `3`→240 s C33 | - |

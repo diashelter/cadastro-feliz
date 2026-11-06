@@ -1,6 +1,6 @@
 {
     "name": "modules/users",
-    "description": "POST /users e o e-mail de boas-vindas.",
+    "description": "POST /users, com os limites e a gravação do usuário e do evento.",
     "type": "library",
     "version": "1.0",
     "license": "proprietary",

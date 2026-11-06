@@ -2,10 +2,8 @@
 
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Log;
 use Modules\Users\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Exceptions\RegistrationLimited;
-use Modules\Users\Jobs\SendWelcomeEmailJob;
 use Modules\Users\Models\User;
 use Modules\Users\Repositories\UserRepository;
 use Modules\Users\Services\RegistrationLimiter;
@@ -34,7 +32,7 @@ function fakeUsers(): Mockery\MockInterface
     return test()->mock(UserRepository::class);
 }
 
-it('answers 201 and publishes the job', function () {
+it('answers 201 and publishes no job', function () {
     Bus::fake();
     fakeLimiter();
     fakeUsers()->shouldReceive('create')->once()->with('Ana Souza', 'ana@example.com')->andReturn(fakeUser());
@@ -51,18 +49,7 @@ it('answers 201 and publishes the job', function () {
         ],
         'message' => 'User registered successfully.',
     ]);
-    Bus::assertDispatched(SendWelcomeEmailJob::class, fn ($job) => $job->userId === '0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e');
-});
-
-it('answers 201 and logs when publishing fails', function () {
-    Bus::shouldReceive('dispatch')->once()->andThrow(new RuntimeException('queue down'));
-    Log::spy();
-    fakeLimiter();
-    fakeUsers()->shouldReceive('create')->once()->andReturn(fakeUser());
-
-    $this->postJson('/users', ['name' => 'Ana Souza', 'email' => 'ana@example.com'])->assertStatus(201);
-
-    Log::shouldHaveReceived('error')->once()->with('SendWelcomeEmailJob not published', Mockery::type('array'));
+    Bus::assertNothingDispatched();
 });
 
 it('answers 422 for each field rule', function () {
@@ -110,7 +97,7 @@ it('answers 409 when the email is taken and releases the quota', function () {
         'message' => 'The email has already been taken.',
         'errors' => [['field' => 'email', 'code' => 'already_taken', 'message' => 'The email has already been taken.']],
     ]);
-    Bus::assertNotDispatched(SendWelcomeEmailJob::class);
+    Bus::assertNothingDispatched();
 });
 
 it('answers 429 with retry after when the attempts are exceeded', function () {

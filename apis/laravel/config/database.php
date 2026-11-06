@@ -155,7 +155,7 @@ return [
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
 
-        // A fila da stack. O php-fpm define os tempos limite, para a publicação desistir
+        // A fila da stack. O scheduler define os tempos limite, para a publicação desistir
         // em 1 s; o Horizon não os define, para o worker esperar o Redis voltar.
         'default' => [
             'url' => env('REDIS_URL'),

@@ -5,6 +5,7 @@
 NG=cadastro-feliz-laravel-nginx-1
 FPM=cadastro-feliz-laravel-php-fpm-1
 HZ=cadastro-feliz-laravel-horizon-1
+SC=cadastro-feliz-laravel-scheduler-1
 RD=cadastro-feliz-laravel-redis-1
 FPM_IMAGE=cadastro-feliz-laravel-php-fpm
 LV="$WORK/apis/laravel"
@@ -25,7 +26,7 @@ wait_for() {
 
 lv_healthy() {
   local c
-  for c in "$NG" "$FPM" "$HZ" "$RD"; do
+  for c in "$NG" "$FPM" "$HZ" "$RD" "$SC"; do
     [ "$(health "$c")" = healthy ] || return 1
   done
 }
@@ -109,7 +110,7 @@ check "LV48 health tests are pest in the module" t_lv48_health_tests_pest
 t_lv49_modular_locked() {
   local name ok=0
   [ "$(lock_version internachi/modular)" = 3.0.2 ] || { note "modular: $(lock_version internachi/modular)"; ok=1; }
-  for name in health users; do
+  for name in health outbox users; do
     [ "$(jq -r --arg n "modules/$name" '.packages[] | select(.name == $n) | .dist.url' "$LV/composer.lock")" = "app-modules/$name" ] \
       || { note "modules/$name não vem de app-modules"; ok=1; }
   done
@@ -121,7 +122,7 @@ t_lv50_modules_layout() {
   local name ok=0
   [ ! -e "$LV/app/Modules" ] || { note "app/Modules existe"; ok=1; }
   [ ! -e "$LV/routes/api.php" ] || { note "routes/api.php existe"; ok=1; }
-  for name in health users; do
+  for name in health outbox users; do
     [ -f "$LV/app-modules/$name/composer.json" ] || { note "$name sem composer.json"; ok=1; }
     [ -d "$LV/app-modules/$name/src" ] || { note "$name sem src"; ok=1; }
   done
@@ -163,8 +164,8 @@ t_lv1_clean_clone() {
   destroy_environment
   rm -f "$WORK/.env"
   mkq up-laravel || { note "make up-laravel saiu com erro"; return 1; }
-  lv_healthy || { note "nginx: $(health "$NG"), php-fpm: $(health "$FPM"), horizon: $(health "$HZ"), redis: $(health "$RD")"; return 1; }
-  [ "$(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}' | sort | tr '\n' ' ')" = "$HZ $NG $FPM $RD " ] \
+  lv_healthy || { note "nginx: $(health "$NG"), php-fpm: $(health "$FPM"), horizon: $(health "$HZ"), redis: $(health "$RD"), scheduler: $(health "$SC")"; return 1; }
+  [ "$(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}' | sort | tr '\n' ' ')" = "$HZ $NG $FPM $RD $SC " ] \
     || { note "containers do projeto: $(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}')"; return 1; }
   status_is /health 200 || { note "GET /health respondeu $(api_status /health)"; return 1; }
 }
@@ -172,7 +173,7 @@ check "LV1 up-laravel on clean clone" t_lv1_clean_clone
 
 t_lv51_image_modules() {
   local name
-  for name in health users; do
+  for name in health outbox users; do
     docker exec "$FPM" test -e "/var/www/html/vendor/modules/$name/composer.json" || { note "vendor sem modules/$name"; return 1; }
   done
 }
@@ -181,7 +182,7 @@ check "LV51 image resolves local modules" t_lv51_image_modules
 t_lv2_rerun() {
   local before after img_before img_after
   before="$(project_containers cadastro-feliz-laravel | sort)"
-  [ "$(echo "$before" | grep -c .)" -eq 4 ] || { note "esperava 4 containers: $before"; return 1; }
+  [ "$(echo "$before" | grep -c .)" -eq 5 ] || { note "esperava 5 containers: $before"; return 1; }
   img_before="$(fpm_image)"
   mkq up-laravel || return 1
   after="$(project_containers cadastro-feliz-laravel | sort)"
@@ -197,6 +198,7 @@ t_lv4_ports() {
   [ "$ports" = "8080 " ] || { note "nginx publica: '$ports'"; return 1; }
   [ -z "$(docker port "$FPM")" ] || { note "php-fpm publica: $(docker port "$FPM")"; return 1; }
   [ -z "$(docker port "$HZ")" ] || { note "horizon publica: $(docker port "$HZ")"; return 1; }
+  [ -z "$(docker port "$SC")" ] || { note "scheduler publica: $(docker port "$SC")"; return 1; }
   [ -z "$(docker port "$RD")" ] || { note "redis publica: $(docker port "$RD")"; return 1; }
 }
 check "LV4 laravel published ports" t_lv4_ports
@@ -210,6 +212,7 @@ t_lv5_images() {
   docker exec "$FPM" php -m | grep -qx redis || { note "sem redis"; ok=1; }
   [ "$(docker exec "$FPM" php -r 'echo phpversion("redis");')" = 6.3.0 ] || { note "phpredis não é 6.3.0"; ok=1; }
   [ "$(docker inspect -f '{{.Config.Image}}' "$HZ")" = "$FPM_IMAGE" ] || { note "imagem do horizon"; ok=1; }
+  [ "$(docker inspect -f '{{.Config.Image}}' "$SC")" = "$FPM_IMAGE" ] || { note "imagem do scheduler"; ok=1; }
   docker exec "$FPM" php -m | grep -qx pcntl || { note "php-fpm sem pcntl"; ok=1; }
   docker exec "$HZ" php -m | grep -qx pcntl || { note "horizon sem pcntl"; ok=1; }
   return $ok
@@ -600,7 +603,7 @@ t_lv23_watch_starts() {
   wait_for 600 watch_ready || { note "watch não ficou pronto: $(tail -5 "$WORK/watch.log")"; return 1; }
   [ -f "$WORK/.env" ] || { note "sem .env"; ok=1; }
   network_exists || { note "sem a rede"; ok=1; }
-  lv_healthy || { note "nginx $(health "$NG"), php-fpm $(health "$FPM"), horizon $(health "$HZ"), redis $(health "$RD")"; ok=1; }
+  lv_healthy || { note "nginx $(health "$NG"), php-fpm $(health "$FPM"), horizon $(health "$HZ"), redis $(health "$RD"), scheduler $(health "$SC")"; ok=1; }
   status_is /probe 200 || { note "/probe respondeu $(api_status /probe)"; ok=1; }
   watch_alive || { note "watch saiu"; ok=1; }
   return $ok
@@ -642,7 +645,11 @@ rebuild_on() {
   watch_alive || { note "watch fora do ar"; return 1; }
   save "$file"
   "$@"
-  wait_for 180 new_fpm_healthy "$before" || { note "$name: php-fpm $(lv_id "$FPM" | cut -c1-12), $(health "$FPM")"; ok=1; }
+  wait_for 180 new_fpm_healthy "$before" \
+    || { note "$name: php-fpm $(lv_id "$FPM" | cut -c1-12), $(health "$FPM"), horizon $(health "$HZ"), scheduler $(health "$SC")"; ok=1; }
+  # O worker e o relay voltam na imagem nova, não só o php-fpm.
+  [ "$(docker inspect -f '{{.Image}}' "$HZ")" = "$(docker inspect -f '{{.Image}}' "$FPM")" ] || { note "$name: horizon em outra imagem"; ok=1; }
+  [ "$(docker inspect -f '{{.Image}}' "$SC")" = "$(docker inspect -f '{{.Image}}' "$FPM")" ] || { note "$name: scheduler em outra imagem"; ok=1; }
   before="$(lv_id "$FPM")"
   restore "$file"
   wait_for 180 new_fpm_healthy "$before"

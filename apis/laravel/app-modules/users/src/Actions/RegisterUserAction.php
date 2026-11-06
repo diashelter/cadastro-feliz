@@ -7,20 +7,17 @@ use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Models\User;
 use Modules\Users\Repositories\UserRepository;
 use Modules\Users\Services\RegistrationLimiter;
-use Modules\Users\Services\WelcomeEmailPublisher;
 use Throwable;
 
 /**
- * A ordem de processamento do contrato. Gravar o usuário e publicar o job são duas
- * escritas sem transação comum, de propósito: é a limitação que o outbox vai corrigir
- * (decisão 21).
+ * A ordem de processamento do contrato. Este caminho não toca na fila: o relay publica
+ * o evento que o UserRepository grava na transação do cadastro.
  */
 class RegisterUserAction
 {
     public function __construct(
         private RegistrationLimiter $limiter,
         private UserRepository $users,
-        private WelcomeEmailPublisher $publisher,
     ) {}
 
     /** @throws RegistrationLimited */
@@ -32,16 +29,12 @@ class RegisterUserAction
         $this->limiter->reserveQuota($ip);
 
         try {
-            $user = $this->users->create(trim($name), $email);
+            return $this->users->create(trim($name), $email);
         } catch (Throwable $e) {
             $this->releaseQuota($ip);
 
             throw $e;
         }
-
-        $this->publisher->publish($user);
-
-        return $user;
     }
 
     private function releaseQuota(string $ip): void

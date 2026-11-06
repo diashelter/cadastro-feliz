@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5120549506d7e33ae2b8b4c83254af0d",
+    "content-hash": "34bddf50bdc5e4098afb6823a7f2b371",
     "packages": [
         {
             "name": "brick/math",
@@ -3110,12 +3110,35 @@
             }
         },
         {
+            "name": "modules/outbox",
+            "version": "1.0",
+            "dist": {
+                "type": "path",
+                "url": "app-modules/outbox",
+                "reference": "6d4fef4c766d35c2a4ff1717ff1de9e100865965"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Modules\\Outbox\\": "src/"
+                }
+            },
+            "license": [
+                "proprietary"
+            ],
+            "description": "O evento em users_outbox, o relay e o envio do e-mail de boas-vindas.",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
+        },
+        {
             "name": "modules/users",
             "version": "1.0",
             "dist": {
                 "type": "path",
                 "url": "app-modules/users",
-                "reference": "124473f2e1d27faed3173285b724c17f9813d736"
+                "reference": "a3e71b9cb2ddb50232f89bfb1cfa843a8bbc1261"
             },
             "type": "library",
             "autoload": {
@@ -3126,7 +3149,7 @@
             "license": [
                 "proprietary"
             ],
-            "description": "POST /users e o e-mail de boas-vindas.",
+            "description": "POST /users, com os limites e a gravação do usuário e do evento.",
             "transport-options": {
                 "symlink": true,
                 "relative": true
