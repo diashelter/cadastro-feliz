@@ -1,8 +1,11 @@
-# Base da API Laravel (.specs/features/laravel-api-base). Carregado por run.sh, que
-# define o fake_stack usado em LV9.
+# Base da API Laravel (.specs/features/laravel-api-base), com módulos, Pest e o Horizon
+# (.specs/features/laravel-registration-email). Carregado por run.sh, que define o
+# fake_stack usado em LV9.
 
 NG=cadastro-feliz-laravel-nginx-1
 FPM=cadastro-feliz-laravel-php-fpm-1
+HZ=cadastro-feliz-laravel-horizon-1
+RD=cadastro-feliz-laravel-redis-1
 FPM_IMAGE=cadastro-feliz-laravel-php-fpm
 LV="$WORK/apis/laravel"
 WATCH_PID=
@@ -20,16 +23,31 @@ wait_for() {
   "$@"
 }
 
-lv_healthy() { [ "$(health "$NG")" = healthy ] && [ "$(health "$FPM")" = healthy ]; }
+lv_healthy() {
+  local c
+  for c in "$NG" "$FPM" "$HZ" "$RD"; do
+    [ "$(health "$c")" = healthy ] || return 1
+  done
+}
 status_is() { [ "$(api_status "$1")" = "$2" ]; }
 body_is() { [ "$(api "$1")" = "$2" ]; }
+# health_within_limit <corpo esperado>: /health responde 503, com esse corpo, em menos de 3 s.
+health_within_limit() {
+  local expected="$1" out code secs body ok=0
+  out="$(curl -s -o "$WORK/limit.body" --max-time 10 -w '%{http_code} %{time_total}' localhost:8080/health)"
+  code="${out% *}"; secs="${out#* }"; body="$(cat "$WORK/limit.body")"
+  [ "$code" = 503 ] || { note "status $code"; ok=1; }
+  [ "$body" = "$expected" ] || { note "corpo: $body"; ok=1; }
+  awk -v s="$secs" 'BEGIN { exit !(s < 3) }' || { note "levou ${secs}s"; ok=1; }
+  return $ok
+}
 shared_back() { wait_for 60 shared_healthy; }
 
 # Guarda e devolve um arquivo da cópia de trabalho, para cada teste deixar tudo como achou.
 save() { cp -p "$1" "$1.lvsave"; }
 restore() { mv -f "$1.lvsave" "$1"; }
 
-routes="$LV/routes/api.php"
+routes="$LV/app-modules/health/routes/health-routes.php"
 add_probe_route() { printf '\nRoute::get('"'"'/probe'"'"', fn () => '"'"'probe-ok'"'"');\n' >> "$routes"; }
 
 # --- Arquivos do repositório, sem Docker ---
@@ -42,6 +60,8 @@ t_lv10_repo_files() {
   for p in .env .env.example database/migrations; do
     [ ! -e "$LV/$p" ] || { note "apis/laravel/$p existe"; ok=1; }
   done
+  p="$(find "$LV/app-modules" -type d -path '*/database/migrations')"
+  [ -z "$p" ] || { note "módulo com migrations: $p"; ok=1; }
   return $ok
 }
 check "LV10 no vendor env or migrations in repo" t_lv10_repo_files
@@ -64,6 +84,50 @@ t_lv6_framework_locked() {
   [ "$version" = v13.40.0 ] || { note "laravel/framework travado em '$version'"; return 1; }
 }
 check "LV6 framework version locked" t_lv6_framework_locked
+
+lock_version() { jq -r --arg n "$1" '(.packages + ."packages-dev")[] | select(.name == $n) | .version' "$LV/composer.lock"; }
+
+t_lv46_pest_locked() {
+  local ok=0
+  [ "$(lock_version pestphp/pest)" = v5.3.5 ] || { note "pest: $(lock_version pestphp/pest)"; ok=1; }
+  [ "$(lock_version pestphp/pest-plugin-laravel)" = v5.0.1 ] || { note "plugin: $(lock_version pestphp/pest-plugin-laravel)"; ok=1; }
+  grep -qE '^13\.' <<< "$(lock_version phpunit/phpunit)" || { note "phpunit: $(lock_version phpunit/phpunit)"; ok=1; }
+  return $ok
+}
+check "LV46 pest versions locked" t_lv46_pest_locked
+
+t_lv48_health_tests_pest() {
+  local f="$LV/app-modules/health/tests/HealthTest.php" ok=0
+  [ -f "$f" ] || { note "sem $f"; return 1; }
+  [ "$(grep -cE "^it\('" "$f")" -eq 4 ] || { note "esperava 4 testes it()"; ok=1; }
+  grep -qE 'extends +[A-Za-z\\]*TestCase' "$f" && { note "ainda é uma classe do PHPUnit"; ok=1; }
+  [ ! -e "$LV/tests/Feature/Health" ] || { note "tests/Feature/Health ainda existe"; ok=1; }
+  return $ok
+}
+check "LV48 health tests are pest in the module" t_lv48_health_tests_pest
+
+t_lv49_modular_locked() {
+  local name ok=0
+  [ "$(lock_version internachi/modular)" = 3.0.2 ] || { note "modular: $(lock_version internachi/modular)"; ok=1; }
+  for name in health users; do
+    [ "$(jq -r --arg n "modules/$name" '.packages[] | select(.name == $n) | .dist.url' "$LV/composer.lock")" = "app-modules/$name" ] \
+      || { note "modules/$name não vem de app-modules"; ok=1; }
+  done
+  return $ok
+}
+check "LV49 modular locked with local modules" t_lv49_modular_locked
+
+t_lv50_modules_layout() {
+  local name ok=0
+  [ ! -e "$LV/app/Modules" ] || { note "app/Modules existe"; ok=1; }
+  [ ! -e "$LV/routes/api.php" ] || { note "routes/api.php existe"; ok=1; }
+  for name in health users; do
+    [ -f "$LV/app-modules/$name/composer.json" ] || { note "$name sem composer.json"; ok=1; }
+    [ -d "$LV/app-modules/$name/src" ] || { note "$name sem src"; ok=1; }
+  done
+  return $ok
+}
+check "LV50 modules layout" t_lv50_modules_layout
 
 t_lv34_ci() {
   local job ok=0 install_line sum_line run_line
@@ -99,15 +163,25 @@ t_lv1_clean_clone() {
   destroy_environment
   rm -f "$WORK/.env"
   mkq up-laravel || { note "make up-laravel saiu com erro"; return 1; }
-  lv_healthy || { note "nginx: $(health "$NG"), php-fpm: $(health "$FPM")"; return 1; }
+  lv_healthy || { note "nginx: $(health "$NG"), php-fpm: $(health "$FPM"), horizon: $(health "$HZ"), redis: $(health "$RD")"; return 1; }
+  [ "$(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}' | sort | tr '\n' ' ')" = "$HZ $NG $FPM $RD " ] \
+    || { note "containers do projeto: $(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}')"; return 1; }
   status_is /health 200 || { note "GET /health respondeu $(api_status /health)"; return 1; }
 }
 check "LV1 up-laravel on clean clone" t_lv1_clean_clone
 
+t_lv51_image_modules() {
+  local name
+  for name in health users; do
+    docker exec "$FPM" test -e "/var/www/html/vendor/modules/$name/composer.json" || { note "vendor sem modules/$name"; return 1; }
+  done
+}
+check "LV51 image resolves local modules" t_lv51_image_modules
+
 t_lv2_rerun() {
   local before after img_before img_after
   before="$(project_containers cadastro-feliz-laravel | sort)"
-  [ "$(echo "$before" | grep -c .)" -eq 2 ] || { note "esperava 2 containers: $before"; return 1; }
+  [ "$(echo "$before" | grep -c .)" -eq 4 ] || { note "esperava 4 containers: $before"; return 1; }
   img_before="$(fpm_image)"
   mkq up-laravel || return 1
   after="$(project_containers cadastro-feliz-laravel | sort)"
@@ -122,6 +196,8 @@ t_lv4_ports() {
   ports="$(docker port "$NG" | sed -E 's/.*:([0-9]+)$/\1/' | sort -u | tr '\n' ' ')"
   [ "$ports" = "8080 " ] || { note "nginx publica: '$ports'"; return 1; }
   [ -z "$(docker port "$FPM")" ] || { note "php-fpm publica: $(docker port "$FPM")"; return 1; }
+  [ -z "$(docker port "$HZ")" ] || { note "horizon publica: $(docker port "$HZ")"; return 1; }
+  [ -z "$(docker port "$RD")" ] || { note "redis publica: $(docker port "$RD")"; return 1; }
 }
 check "LV4 laravel published ports" t_lv4_ports
 
@@ -133,6 +209,9 @@ t_lv5_images() {
   docker exec "$FPM" php -m | grep -qx pdo_pgsql || { note "sem pdo_pgsql"; ok=1; }
   docker exec "$FPM" php -m | grep -qx redis || { note "sem redis"; ok=1; }
   [ "$(docker exec "$FPM" php -r 'echo phpversion("redis");')" = 6.3.0 ] || { note "phpredis não é 6.3.0"; ok=1; }
+  [ "$(docker inspect -f '{{.Config.Image}}' "$HZ")" = "$FPM_IMAGE" ] || { note "imagem do horizon"; ok=1; }
+  docker exec "$FPM" php -m | grep -qx pcntl || { note "php-fpm sem pcntl"; ok=1; }
+  docker exec "$HZ" php -m | grep -qx pcntl || { note "horizon sem pcntl"; ok=1; }
   return $ok
 }
 check "LV5 laravel images and extensions" t_lv5_images
@@ -184,20 +263,20 @@ t_lv21_json_404() {
 }
 check "LV21 unknown route answers json" t_lv21_json_404
 
-t_lv44_only_health_route() {
+t_lv44_routes() {
   local uris ok=0 method
-  uris="$(docker exec "$FPM" php artisan route:list --json | jq -c '[.[].uri] | sort')"
-  [ "$uris" = '["health"]' ] || { note "rotas: $uris"; ok=1; }
+  uris="$(docker exec "$FPM" php artisan route:list --json | jq -c '[.[].uri | select(startswith("horizon") | not)] | sort')"
+  [ "$uris" = '["health","users"]' ] || { note "rotas: $uris"; ok=1; }
   for method in GET PUT; do
     [ "$(curl -s -o /dev/null --max-time 10 -X "$method" -w '%{http_code}' localhost:8080/storage/x)" = 404 ] \
       || { note "$method /storage/x não respondeu 404"; ok=1; }
   done
   return $ok
 }
-check "LV44 api exposes only health" t_lv44_only_health_route
+check "LV44 api routes are health users and horizon" t_lv44_routes
 
 t_lv45_no_table_defaults() {
-  local got expected='["pgsql","array","array","sync","stderr"]'
+  local got expected='["pgsql","array","array","redis","stderr"]'
   # Os valores do php-fpm em execução, com as variáveis do container, sem o phpunit.xml.
   got="$(docker exec -w /var/www/html "$FPM" php -r '
     require "vendor/autoload.php";
@@ -212,8 +291,7 @@ check "LV45 laravel defaults use no table" t_lv45_no_table_defaults
 t_lv14_limiter_stopped() {
   local ok=0
   docker stop "$(container redis-limiter)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$LIMITER_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$LIMITER_FAIL" || ok=1
   sleep 30
   lv_healthy || { note "depois de 30 s: nginx $(health "$NG"), php-fpm $(health "$FPM")"; ok=1; }
   docker start "$(container redis-limiter)" >/dev/null
@@ -225,8 +303,7 @@ check "LV14 health 503 when limiter stopped" t_lv14_limiter_stopped
 t_lv15_postgres_stopped() {
   local ok=0
   docker stop "$(container postgres)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$DATABASE_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$DATABASE_FAIL" || ok=1
   docker start "$(container postgres)" >/dev/null
   shared_back
   return $ok
@@ -236,13 +313,29 @@ check "LV15 health 503 when postgres stopped" t_lv15_postgres_stopped
 t_lv16_both_stopped() {
   local ok=0
   docker stop "$(container postgres)" "$(container redis-limiter)" >/dev/null
-  status_is /health 503 || { note "status $(api_status /health)"; ok=1; }
-  body_is /health "$BOTH_FAIL" || { note "corpo: $(api /health)"; ok=1; }
+  health_within_limit "$BOTH_FAIL" || ok=1
   docker start "$(container postgres)" "$(container redis-limiter)" >/dev/null
   shared_back
   return $ok
 }
 check "LV16 health 503 when both stopped" t_lv16_both_stopped
+
+# Como no runner do CI: o nome de um container parado vai para um DNS externo. O endereço
+# abaixo não responde, e o limite de 1 s da conexão não cobre a resolução de nomes.
+t_lv52_mute_dns() {
+  local compose="$LV/docker-compose.yml" ok=0
+  save "$compose"
+  sed -i 's/^  php-fpm:$/  php-fpm:\n    dns: [10.255.255.1]/' "$compose"
+  mkq up-laravel || { note "make up-laravel saiu com erro"; ok=1; }
+  docker stop "$(container postgres)" "$(container redis-limiter)" >/dev/null
+  health_within_limit "$BOTH_FAIL" || ok=1
+  docker start "$(container postgres)" "$(container redis-limiter)" >/dev/null
+  shared_back
+  restore "$compose"
+  mkq up-laravel
+  return $ok
+}
+check "LV52 health within limit when external dns is mute" t_lv52_mute_dns
 
 # paused_health <serviço> <corpo esperado>: pausa o serviço, mede /health e despausa.
 paused_health() {
@@ -318,29 +411,20 @@ t_lv33_test_keeps_stack() {
 }
 check "LV33 test-laravel keeps running stack" t_lv33_test_keeps_stack
 
-t_lv32_failing_test() {
-  local f="$LV/tests/Feature/ProbeFailTest.php" rc
-  cat > "$f" <<'PHP'
-<?php
-
-namespace Tests\Feature;
-
-use Tests\TestCase;
-
-class ProbeFailTest extends TestCase
-{
-    public function test_fails_on_purpose(): void
-    {
-        $this->assertTrue(false);
-    }
-}
-PHP
-  mkq test-laravel
+# failing_test_reported <arquivo>: um teste it() falho nesse arquivo faz o alvo sair com
+# erro e imprimir o nome dele, então o Pest também encontra testes nesse lugar.
+failing_test_reported() {
+  local f="$1" out rc
+  printf "<?php\n\nit('probe fails on purpose', function () {\n    expect(true)->toBeFalse();\n});\n" > "$f"
+  out="$(mk test-laravel 2>&1)"
   rc=$?
   rm -f "$f"
   [ "$rc" -ne 0 ] || { note "make test-laravel saiu com 0"; return 1; }
+  grep -qF 'probe fails on purpose' <<< "$out" || { note "saída sem o nome do teste"; return 1; }
 }
-check "LV32 test-laravel fails on failing test" t_lv32_failing_test
+
+check "LV32 test-laravel fails on failing test" failing_test_reported "$LV/tests/Feature/ProbeFailTest.php"
+check "LV47 test-laravel runs module tests" failing_test_reported "$LV/app-modules/health/tests/ProbeFailTest.php"
 
 # --- S3 - make laravel-composer ---
 
@@ -366,8 +450,11 @@ t_lv29_composer_keeps_stack() {
 check "LV29 laravel-composer keeps running stack" t_lv29_composer_keeps_stack
 
 t_lv27_composer_writes_json_and_lock() {
-  local json="$LV/composer.json" lock="$LV/composer.lock" uid ok=0 cache
+  local json="$LV/composer.json" lock="$LV/composer.lock" uid ok=0 cache others
+  # Tudo em apis/laravel, menos os dois arquivos que podem mudar e as cópias de save.
+  others() { (cd "$LV" && find . -type f ! -name composer.json ! -name composer.lock ! -name '*.lvsave' -exec sha256sum {} + | sort -k2); }
   save "$json"; save "$lock"
+  cache="$(others)"
   # Como root, o dono dos arquivos não diria nada: o make roda como outro uid,
   # com acesso ao socket do Docker, sobre uma cópia que pertence a ele.
   uid="$(id -u)"
@@ -383,6 +470,7 @@ t_lv27_composer_writes_json_and_lock() {
     caller() { mkq "$@"; }
   fi
   caller laravel-composer ARGS="require webmozart/assert:1.11.0" || { note "require saiu com erro"; return 1; }
+  [ "$(others)" = "$cache" ] || { note "outro arquivo mudou em apis/laravel"; ok=1; }
   [ "$(jq -r '.require["webmozart/assert"] // empty' "$json")" != "" ] || { note "composer.json sem webmozart/assert em require"; ok=1; }
   [ "$(jq -r '.packages[] | select(.name == "webmozart/assert") | .version' "$lock")" = 1.11.0 ] \
     || { note "composer.lock sem webmozart/assert 1.11.0"; ok=1; }
@@ -448,7 +536,7 @@ t_lv7_boot_failure() {
   broken_boot "$LV/bootstrap/app.php" || ok=1
   # Quebra só em execução: o LimiterCheck só é carregado na requisição, /health
   # responde 500, e o healthcheck do nginx recusa.
-  broken_boot "$LV/app/Modules/Health/Checks/LimiterCheck.php" || ok=1
+  broken_boot "$LV/app-modules/health/src/Checks/LimiterCheck.php" || ok=1
   return $ok
 }
 check "LV7 up-laravel fails when laravel does not boot" t_lv7_boot_failure
@@ -473,6 +561,7 @@ t_lv9_switch_and_down() {
   mkq up-laravel || { note "make up-laravel saiu com erro"; ok=1; }
   mkq down-laravel || { note "make down-laravel saiu com erro"; ok=1; }
   [ -z "$(project_containers cadastro-feliz-laravel)" ] || { note "containers da Laravel depois de down"; ok=1; }
+  [ -z "$(docker volume ls -q --filter label=com.docker.compose.project=cadastro-feliz-laravel)" ] || { note "volume da Laravel depois de down"; ok=1; }
   shared_healthy || { note "comuns não estão healthy"; ok=1; }
   rm -rf "$WORK/apis/golang"
   return $ok
@@ -511,7 +600,7 @@ t_lv23_watch_starts() {
   wait_for 600 watch_ready || { note "watch não ficou pronto: $(tail -5 "$WORK/watch.log")"; return 1; }
   [ -f "$WORK/.env" ] || { note "sem .env"; ok=1; }
   network_exists || { note "sem a rede"; ok=1; }
-  lv_healthy || { note "nginx $(health "$NG"), php-fpm $(health "$FPM")"; ok=1; }
+  lv_healthy || { note "nginx $(health "$NG"), php-fpm $(health "$FPM"), horizon $(health "$HZ"), redis $(health "$RD")"; ok=1; }
   status_is /probe 200 || { note "/probe respondeu $(api_status /probe)"; ok=1; }
   watch_alive || { note "watch saiu"; ok=1; }
   return $ok
@@ -519,22 +608,27 @@ t_lv23_watch_starts() {
 check "LV23 watch-laravel starts stack with current code" t_lv23_watch_starts
 
 t_lv24_watch_syncs() {
-  local before ok=0
+  local before ok=0 module_routes="$LV/app-modules/users/routes/users-routes.php"
   before="$(lv_id "$FPM")"
   [ -n "$before" ] && watch_alive || { note "watch fora do ar"; return 1; }
-  mkdir -p "$LV/app/Probe"
-  printf '<?php\n\nnamespace App\\Probe;\n\nclass ProbeValue\n{\n    public static function value(): string\n    {\n        return '"'"'um'"'"';\n    }\n}\n' > "$LV/app/Probe/ProbeValue.php"
+  save "$module_routes"
+  mkdir -p "$LV/app/Probe" "$LV/app-modules/users/src/Probe"
+  printf '<?php\n\nnamespace App\\Probe;\n\nclass ProbeValue\n{\n    public static function value(): string\n    {\n        return '"'"'app'"'"';\n    }\n}\n' > "$LV/app/Probe/ProbeValue.php"
+  printf '<?php\n\nnamespace Modules\\Users\\Probe;\n\nclass ProbeValue\n{\n    public static function value(): string\n    {\n        return '"'"'um'"'"';\n    }\n}\n' > "$LV/app-modules/users/src/Probe/ProbeValue.php"
   printf '<?php\n\nreturn ['"'"'value'"'"' => '"'"'cfg'"'"'];\n' > "$LV/config/probe.php"
-  printf '\nRoute::get('"'"'/probe-sync'"'"', fn () => \\App\\Probe\\ProbeValue::value().'"'"'-'"'"'.config('"'"'probe.value'"'"'));\n' >> "$routes"
-  wait_for 10 body_is /probe-sync um-cfg || { note "/probe-sync: $(api /probe-sync)"; ok=1; }
-  sed -i "s/'um'/'dois'/" "$LV/app/Probe/ProbeValue.php"
-  wait_for 10 body_is /probe-sync dois-cfg || { note "/probe-sync depois da troca: $(api /probe-sync)"; ok=1; }
+  printf '\nRoute::get('"'"'/probe-sync'"'"', fn () => \\Modules\\Users\\Probe\\ProbeValue::value().'"'"'-'"'"'.\\App\\Probe\\ProbeValue::value().'"'"'-'"'"'.config('"'"'probe.value'"'"'));\n' >> "$module_routes"
+  wait_for 10 body_is /probe-sync um-app-cfg || { note "/probe-sync: $(api /probe-sync)"; ok=1; }
+  sed -i "s/'um'/'dois'/" "$LV/app-modules/users/src/Probe/ProbeValue.php"
+  wait_for 10 body_is /probe-sync dois-app-cfg || { note "/probe-sync depois da troca: $(api /probe-sync)"; ok=1; }
   echo probe > "$LV/tests/probe-sync.txt"
   echo probe > "$LV/bootstrap/probe-sync.txt"
+  echo probe > "$LV/routes/probe-sync.txt"
   wait_for 10 docker exec "$FPM" test -f /var/www/html/tests/probe-sync.txt || { note "tests não sincronizou"; ok=1; }
   wait_for 10 docker exec "$FPM" test -f /var/www/html/bootstrap/probe-sync.txt || { note "bootstrap não sincronizou"; ok=1; }
+  wait_for 10 docker exec "$FPM" test -f /var/www/html/routes/probe-sync.txt || { note "routes não sincronizou"; ok=1; }
   [ "$(lv_id "$FPM")" = "$before" ] || { note "php-fpm reiniciou"; ok=1; }
-  rm -rf "$LV/app/Probe" "$LV/config/probe.php" "$LV/tests/probe-sync.txt" "$LV/bootstrap/probe-sync.txt"
+  rm -rf "$LV/app/Probe" "$LV/app-modules/users/src/Probe" "$LV/config/probe.php" "$LV/tests/probe-sync.txt" "$LV/bootstrap/probe-sync.txt" "$LV/routes/probe-sync.txt"
+  restore "$module_routes"
   return $ok
 }
 check "LV24 watch syncs code without restart" t_lv24_watch_syncs

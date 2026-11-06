@@ -1,6 +1,6 @@
 # Contrato da API
 
-> **Status:** em construção. Nenhuma stack implementa `POST /users` ainda. A stack Laravel implementa [`GET /health`](#get-health), testado por `make test-laravel` e `make test-infra`. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
+> **Status:** em construção. A stack Laravel implementa `POST /users` e [`GET /health`](#get-health), testados por `make test-laravel` e `make test-infra`. Ela ainda não tem o outbox (decisão 21): `users_outbox` fica sem linhas, a publicação na fila não muda a resposta, e o `201` não garante o envio do e-mail. NestJS e Go não têm nenhum dos dois. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
 
 As três stacks expõem exatamente o mesmo contrato em `http://localhost:8080`. O frontend não sabe qual delas está respondendo.
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Health\Checks;
+namespace Modules\Health\Checks;
 
 /**
  * Uma dependência que GET /health consulta. Falha lançando qualquer Throwable.

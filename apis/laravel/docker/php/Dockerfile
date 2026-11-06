@@ -8,7 +8,7 @@ FROM php:8.5.12-fpm-alpine AS base
 # libpq e fcgi ficam; os pacotes de compilação saem depois de construir as extensões.
 RUN apk add --no-cache libpq fcgi \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS postgresql-dev \
-    && docker-php-ext-install pdo_pgsql \
+    && docker-php-ext-install pdo_pgsql pcntl \
     && pecl install redis-6.3.0 \
     && docker-php-ext-enable redis \
     && apk del .build-deps
@@ -19,10 +19,17 @@ COPY docker/php/php-fpm.d/zz-health.conf /usr/local/etc/php-fpm.d/zz-health.conf
 
 WORKDIR /var/www/html
 
+# Só os composer.json dos módulos: o repositório local do composer precisa deles para
+# instalar, e sem o resto do código uma edição em um módulo não reinstala o vendor.
+FROM base AS module-manifests
+COPY app-modules /tmp/app-modules
+RUN find /tmp/app-modules -type f ! -name composer.json -delete
+
 FROM base AS app
 
 # As dependências antes do código: editar o código não reinstala o vendor.
 COPY composer.json composer.lock ./
+COPY --from=module-manifests /tmp/app-modules ./app-modules
 RUN composer install --no-interaction --no-scripts --no-autoloader --prefer-dist
 
 COPY . .

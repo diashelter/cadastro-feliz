@@ -4,7 +4,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. A base da stack Laravel funciona: `make up-laravel` sobe `nginx` e `php-fpm`, e `GET /health` diz se o banco e o contador respondem. NestJS e Go ainda estão em design, e os comandos delas recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. A stack Laravel funciona, por enquanto sem o outbox (decisão 21): `make up-laravel` sobe `nginx`, `php-fpm`, `horizon` e `redis`, `POST /users` faz o cadastro, o Horizon envia o e-mail de boas-vindas, e `GET /health` diz se o banco e o contador respondem. NestJS e Go ainda estão em design, e os comandos delas recusam com `stack <nome> ainda não implementada`.
 
 ## Caso de uso
 
@@ -14,7 +14,9 @@ Uma pessoa preenche nome e e-mail em um formulário público e recebe um e-mail 
 2. A API grava o usuário e o evento de envio na mesma transação e responde `201`.
 3. Um processo em segundo plano envia o e-mail de confirmação.
 
-O cadastro depende só do PostgreSQL e do Redis que conta as tentativas. A fila e o servidor de e-mail podem estar fora do ar: se a API responde `201`, o evento está gravado e será processado quando eles voltarem.
+É o desenho completo, com o outbox. A stack Laravel ainda não o tem, para a limitação ser observada antes de corrigida ([decisão 21](docs/decisions.md#21-stack-laravel-sem-outbox-até-a-rodada-do-outbox)): ela grava só o usuário e publica o job direto na fila, então o `201` não garante o e-mail.
+
+O cadastro depende só do PostgreSQL e do Redis que conta as tentativas. A fila e o servidor de e-mail podem estar fora do ar. Com o outbox, o evento fica gravado e é processado quando eles voltarem; sem ele, um job perdido é um e-mail perdido.
 
 ## Arquitetura
 
@@ -76,7 +78,7 @@ Todas expõem também `GET /health`, que responde `200` quando o PostgreSQL e o 
 
 ## Como vai funcionar
 
-> Por enquanto só a stack Laravel tem o próprio `docker-compose.yml`; os alvos de NestJS e Go recusam até terem o deles. `make up-shared` e `make migrate` sobem os serviços compartilhados com o schema aplicado, e o formulário responde em <http://localhost:3000>.
+> Por enquanto só a stack Laravel tem o próprio `docker-compose.yml`; os alvos de NestJS e Go recusam até terem o deles. Com `make up-shared` e `make up-laravel`, o formulário em <http://localhost:3000> já conclui o cadastro, e o e-mail aparece em <http://localhost:8025>.
 
 O único pré-requisito é Docker com Docker Compose 2.39 ou mais recente, além do `make`.
 
@@ -207,7 +209,7 @@ cadastro-feliz/
 ├── docs/
 ├── frontend/                 # Next.js em next dev, com o formulário
 └── apis/
-    ├── laravel/              # nginx, php-fpm e GET /health
+    ├── laravel/              # nginx, php-fpm, horizon, redis e os módulos
     ├── nestjs/               # planejado
     └── golang/               # planejado
 ```
@@ -225,6 +227,7 @@ cadastro-feliz/
 
 ## Limites conhecidos
 
+- **E-mail perdido na stack Laravel:** até o outbox chegar, o e-mail se perde se a fila estiver fora do ar no cadastro, se a stack cair com o job na fila, ou se o SMTP ficar fora até esgotar as tentativas. Os casos estão em [Limitações do fluxo sem outbox](docs/architecture.md#limitações-do-fluxo-sem-outbox).
 - **E-mails duplicados:** a entrega é *at-least-once*, então uma queda no momento errado pode enviar o e-mail duas vezes.
 - **Enumeração de e-mails:** o `409` revela que um e-mail já está cadastrado.
 - **Bloqueio por quem divide o IP:** o limite conta o par IP e e-mail, então só quem está atrás do mesmo IP pode bloquear o cadastro de um e-mail alheio, por até 15 minutos.

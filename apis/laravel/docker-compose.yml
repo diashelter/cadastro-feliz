@@ -9,23 +9,46 @@ x-php-build: &php-build
   # mudanças gera a mesma imagem, e o container não é recriado à toa.
   provenance: false
 
+# As variáveis de que o php-fpm e o horizon precisam, do .env da raiz.
+x-app-env: &app-env
+  APP_KEY: ${APP_KEY}
+  APP_ENV: ${APP_ENV}
+  APP_DEBUG: ${APP_DEBUG}
+  CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN}
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
+  DB_DATABASE: ${DB_DATABASE}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+  LIMITER_REDIS_HOST: ${LIMITER_REDIS_HOST}
+  LIMITER_REDIS_PORT: ${LIMITER_REDIS_PORT}
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  SMTP_HOST: ${SMTP_HOST}
+  SMTP_PORT: ${SMTP_PORT}
+  MAIL_FROM: ${MAIL_FROM}
+  REGISTRATION_MAX_ATTEMPTS: ${REGISTRATION_MAX_ATTEMPTS}
+  REGISTRATION_ATTEMPT_WINDOW_SECONDS: ${REGISTRATION_ATTEMPT_WINDOW_SECONDS}
+  REGISTRATION_MAX_PER_IP: ${REGISTRATION_MAX_PER_IP}
+  REGISTRATION_IP_WINDOW_SECONDS: ${REGISTRATION_IP_WINDOW_SECONDS}
+  OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS}
+  OUTBOX_BACKOFF_BASE_SECONDS: ${OUTBOX_BACKOFF_BASE_SECONDS}
+
 services:
   php-fpm:
     build:
       <<: *php-build
       target: app
     image: cadastro-feliz-laravel-php-fpm
+    # O limite de 1 s da conexão não cobre a resolução de nomes: sem isto, o nome de um
+    # container parado segura a requisição por 5 s quando o DNS externo não responde.
+    dns_opt: ["timeout:1", "attempts:1"]
     environment:
-      APP_KEY: ${APP_KEY}
-      APP_ENV: ${APP_ENV}
-      APP_DEBUG: ${APP_DEBUG}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_DATABASE: ${DB_DATABASE}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      LIMITER_REDIS_HOST: ${LIMITER_REDIS_HOST}
-      LIMITER_REDIS_PORT: ${LIMITER_REDIS_PORT}
+      <<: *app-env
+      # A publicação na fila desiste em 1 s, sem retentar: o 201 não espera o Redis.
+      REDIS_TIMEOUT: "1"
+      REDIS_READ_TIMEOUT: "1"
+      REDIS_MAX_RETRIES: "0"
     healthcheck:
       # Só a página de ping do FPM: ordena a subida do nginx, que prova o caminho inteiro.
       test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
@@ -39,6 +62,9 @@ services:
         - action: sync
           path: ./app
           target: /var/www/html/app
+        - action: sync
+          path: ./app-modules
+          target: /var/www/html/app-modules
         - action: sync
           path: ./bootstrap
           target: /var/www/html/bootstrap
@@ -59,6 +85,59 @@ services:
           path: ./composer.lock
         - action: rebuild
           path: ./docker/php
+
+  # O worker: a mesma imagem do php-fpm, consumindo a fila registration-emails. Sem build
+  # próprio: o Compose grava o nome do serviço na imagem, e dois builds da mesma tag a
+  # fariam alternar de ID, recriando os containers a cada subida.
+  horizon:
+    image: cadastro-feliz-laravel-php-fpm
+    command: ["php", "artisan", "horizon"]
+    environment: *app-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "php", "artisan", "horizon:status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+    develop:
+      watch:
+        # Um worker de longa duração não recarrega o código: cada edição o reinicia.
+        - action: sync+restart
+          path: ./app
+          target: /var/www/html/app
+        - action: sync+restart
+          path: ./app-modules
+          target: /var/www/html/app-modules
+        - action: sync+restart
+          path: ./config
+          target: /var/www/html/config
+
+  # Só a fila, separada do redis-limiter (decisão 5). Sem persistência: a fila é descartada
+  # com a stack, e essa perda é uma das limitações em estudo (decisão 21).
+  redis:
+    image: redis:8.10.3-alpine
+    command:
+      - redis-server
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+      start_interval: 1s
 
   nginx:
     image: nginx:1.30.6-alpine

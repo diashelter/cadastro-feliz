@@ -1,0 +1,13 @@
+{
+    "name": "modules/health",
+    "description": "GET /health, comum às três stacks.",
+    "type": "library",
+    "version": "1.0",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Health\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}
