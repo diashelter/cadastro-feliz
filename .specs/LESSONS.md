@@ -194,6 +194,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: C37 tests/infra/outbox.sh t_ob37_no_transaction (infra) (infra)
 - last seen: 2026-11-06T03:38:55Z
 
+### L-031 - A claim that a failing case restores what it stopped is proven on the failure path or by scanning every early return, not by the next case passing.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: contract-suite
+- evidence: C20 tests/infra/outbox.sh t_ob22_resumes (infra)
+- last seen: 2026-11-08T16:29:12Z
+
+### L-032 - A refusal claimed for every member of a required set is proven by removing each member in turn, not one.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: contract-suite
+- evidence: C9 tests/infra/stack.sh t_cs7_adapter_functions (infra)
+- last seen: 2026-11-08T16:29:12Z
+
+### L-033 - A name resolved to a file is matched exactly against the listed names, since a case-insensitive disk or a path segment also finds the file.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: contract-suite
+- evidence: C21 tests/infra/run.sh check_adapter (infra)
+- last seen: 2026-11-08T16:29:12Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

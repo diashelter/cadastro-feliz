@@ -211,3 +211,5 @@ cadastro-feliz/
 - **Worker:** marca `processed`, ignora eventos terminais, aplica backoff e chega a `failed`.
 
 Os [cenários de validação](architecture.md#cenários-para-validar-a-implementação) cobrem o fluxo de ponta a ponta.
+
+Toda stack é aceita pelos casos de contrato de `tests/infra`, em `registration.sh` e `outbox.sh`, por meio do próprio adaptador em `tests/infra/adapters`. Os casos internos de uma stack ficam num arquivo dela, como `laravel-outbox.sh` (decisão 23 de [decisions.md](decisions.md)).

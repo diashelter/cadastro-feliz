@@ -523,3 +523,42 @@ t_rd5_readme() {
   return $ok
 }
 check "RD5 readme states the outbox" t_rd5_readme
+
+# --- Suíte de contrato por stack (.specs/features/contract-suite) ---
+
+t_cs10_infrastructure() {
+  local f="$WORK/docs/infrastructure.md" row body ok=0
+  row="$(grep -E '^\| `make test-infra` \|' "$f")"
+  grep -qF '`bash tests/infra/run.sh registration:laravel`' <<< "$row" || { note "linha de make test-infra: $row"; ok=1; }
+  body="$(section "$f" 'Integração contínua$')"
+  grep -qF 'Um arquivo de contrato, como `registration` e `outbox`, roda uma vez por adaptador em `tests/infra/adapters`' <<< "$body" \
+    || { note "seção de CI sem o arquivo de contrato por adaptador"; ok=1; }
+  grep -qE '^\| Infraestrutura \(`<entrada>`\) \| `bash tests/infra/run.sh <entrada>`' <<< "$body" \
+    || { note "tabela do CI sem a entrada"; ok=1; }
+  return $ok
+}
+check "CS10 infrastructure describes the contract entries" t_cs10_infrastructure
+
+t_cs11_decision() {
+  local f="$WORK/docs/decisions.md" body term ok=0
+  grep -qxF '| [23](#23-suíte-de-contrato-por-stack) | Suíte de contrato por stack | Definida |' "$f" \
+    || { note "índice sem a decisão 23 Definida"; return 1; }
+  body="$(section "$f" '23\. Suíte de contrato por stack$')"
+  [ -n "$body" ] || { note "seção 23 ausente"; return 1; }
+  for term in 'tests/infra/adapters/<stack>.sh' 'Os ids não mudam de uma stack para outra' \
+    'Matriz de duas dimensões no CI, arquivo × stack'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 23 sem '$term'"; ok=1; }
+  done
+  return $ok
+}
+check "CS11 decision 23 records the contract suite" t_cs11_decision
+
+t_cs12_stacks() {
+  local body
+  body="$(section "$WORK/docs/stacks.md" 'Testes previstos em cada stack$')"
+  grep -qF 'Toda stack é aceita pelos casos de contrato de `tests/infra`' <<< "$body" \
+    && grep -qF 'por meio do próprio adaptador em `tests/infra/adapters`' <<< "$body" \
+    && grep -qF 'Os casos internos de uma stack ficam num arquivo dela' <<< "$body" \
+    || { note "Testes previstos sem a suíte de contrato: $body"; return 1; }
+}
+check "CS12 stacks describe the contract suite" t_cs12_stacks

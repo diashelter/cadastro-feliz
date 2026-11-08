@@ -28,6 +28,7 @@
 | [20](#20-código-da-stack-laravel-copiado-pelo-compose-watch) | Código da stack Laravel copiado pelo Compose Watch | Definida |
 | [21](#21-stack-laravel-sem-outbox-até-a-rodada-do-outbox) | Stack Laravel sem outbox até a rodada do outbox | Definida |
 | [22](#22-message-id-derivado-do-evento) | `Message-ID` derivado do evento | Proposta |
+| [23](#23-suíte-de-contrato-por-stack) | Suíte de contrato por stack | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -267,3 +268,20 @@ Todo e-mail de boas-vindas sai com o `Message-ID` `<event_id>@cadastro-feliz.loc
 **Alternativa descartada:** derivar o domínio de `MAIL_FROM`, porque uma stack com outro remetente quebraria a identificação das duplicatas.
 
 **Custo:** o formato passa a ser um contrato entre as stacks, e mudá-lo depois obriga a mudar nas três.
+
+## 23. Suíte de contrato por stack
+
+Os casos de `tests/infra` que valem para qualquer stack, em `registration.sh` e `outbox.sh`, são os casos de contrato: só observam a porta 8080, o PostgreSQL, o `redis-limiter` e o Mailpit, e só agem sobre a stack pelo adaptador dela, `tests/infra/adapters/<stack>.sh`. O adaptador define um vocabulário de papéis, como parar o worker, parar o relay, congelar a fila e publicar uma mensagem sem o relay, e não de containers. Os ids não mudam de uma stack para outra; a stack aparece na linha `== <arquivo>:<stack>` antes dos casos. O que é interno de uma stack fica num arquivo dela, como `laravel-outbox.sh`. O detalhamento está no [design](../.design/nestjs-stack.md) e no [plano](../.specs/features/contract-suite/plan.md).
+
+**Motivos**
+- **Mesmo contrato, mesma prova:** uma stack nova é aceita pelos mesmos casos, sem cópias que possam divergir.
+- **CI sem mudança:** `run.sh --list` imprime uma entrada por arquivo de contrato e adaptador, e a matriz do CI já é montada a partir dela.
+
+**Alternativas descartadas**
+- **Arquivos de teste por stack:** cada stack copiaria os casos, e uma cópia poderia divergir do contrato sem nenhum teste perceber.
+- **Desvios por stack dentro dos casos:** toda stack nova editaria cada caso.
+- **Matriz de duas dimensões no CI, arquivo × stack:** mudaria o workflow a cada stack nova.
+
+**Custos**
+- Toda stack precisa de um adaptador com o vocabulário inteiro, mesmo quando relay e worker dividem um processo.
+- Um caso de contrato não pode citar nada de uma stack; o OB25 trocou "scheduler" por "relay" no nome.

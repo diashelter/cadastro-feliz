@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 31,
+  "next_id": 34,
   "lessons": [
     {
       "id": "L-001",
@@ -544,6 +544,60 @@
       ],
       "created": "2026-11-06T03:38:55Z",
       "last_seen": "2026-11-06T03:38:55Z"
+    },
+    {
+      "id": "L-031",
+      "key": "weak_test::a claim that a failing case restores what it stopped is proven on the failure path or by scanning every early return not by the next case passing",
+      "text": "A claim that a failing case restores what it stopped is proven on the failure path or by scanning every early return, not by the next case passing.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "contract-suite"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C20 tests/infra/outbox.sh t_ob22_resumes (infra)"
+      ],
+      "created": "2026-11-08T16:29:12Z",
+      "last_seen": "2026-11-08T16:29:12Z"
+    },
+    {
+      "id": "L-032",
+      "key": "weak_test::a refusal claimed for every member of a required set is proven by removing each member in turn not one",
+      "text": "A refusal claimed for every member of a required set is proven by removing each member in turn, not one.",
+      "signal": "weak_test",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "contract-suite"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C9 tests/infra/stack.sh t_cs7_adapter_functions (infra)"
+      ],
+      "created": "2026-11-08T16:29:12Z",
+      "last_seen": "2026-11-08T16:29:12Z"
+    },
+    {
+      "id": "L-033",
+      "key": "ac_gap::a name resolved to a file is matched exactly against the listed names since a case insensitive disk or a path segment also finds the file",
+      "text": "A name resolved to a file is matched exactly against the listed names, since a case-insensitive disk or a path segment also finds the file.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "contract-suite"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C21 tests/infra/run.sh check_adapter (infra)"
+      ],
+      "created": "2026-11-08T16:29:12Z",
+      "last_seen": "2026-11-08T16:29:12Z"
     }
   ]
 }

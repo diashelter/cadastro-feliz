@@ -1,5 +1,6 @@
-# POST /users, Horizon e o e-mail de boas-vindas (.specs/features/laravel-registration-email e laravel-outbox).
-# Carregado por run.sh. Roda contra PostgreSQL, Redis, Horizon e Mailpit de verdade.
+# Casos de contrato de POST /users, da fila e do e-mail de boas-vindas (decisão 23). Carregado
+# por run.sh, que escolhe a stack em $SUITE_STACK e carrega o adaptador dela antes. Roda contra
+# PostgreSQL, redis-limiter, Mailpit e a stack de verdade.
 
 # shellcheck source=/dev/null
 source "$TESTS/registration-helpers.sh"
@@ -9,7 +10,7 @@ LIMITED_BODY='{"message":"Too many registration attempts. Try again later.","err
 FAILED_BODY='{"message":"Internal server error.","errors":[]}'
 
 t_rg0_up() {
-  mkq up-laravel || { note "make up-laravel saiu com erro"; return 1; }
+  mkq "up-$SUITE_STACK" || { note "make up-$SUITE_STACK saiu com erro"; return 1; }
 }
 check "RG0 stack up for the registration tests" t_rg0_up
 
@@ -115,13 +116,13 @@ t_rg7_conflict() {
   rg_reset
   rg_register ana@example.com >/dev/null
   rg_wait_for 30 rg_mail_arrived ana@example.com
-  jobs_before="$(curl -s localhost:8080/horizon/api/stats | jq -r '.recentJobs')"
+  jobs_before="$(stack_jobs_created)"
   [ "$(rg_register ANA@EXAMPLE.COM)" = 409 ] || { note "status: $(rg_body)"; ok=1; }
   [ "$(rg_body)" = "$CONFLICT_BODY" ] || { note "corpo: $(rg_body)"; ok=1; }
   [ "$(rg_users)" = 1 ] || { note "users: $(rg_users)"; ok=1; }
   [ "$(rg_events)" = 1 ] || { note "users_outbox: $(rg_events)"; ok=1; }
   sleep 3
-  [ "$(curl -s localhost:8080/horizon/api/stats | jq -r '.recentJobs')" = "$jobs_before" ] || { note "job novo depois do 409"; ok=1; }
+  [ "$(stack_jobs_created)" = "$jobs_before" ] || { note "job novo depois do 409"; ok=1; }
   return $ok
 }
 check "RG7 repeated email conflicts" t_rg7_conflict
@@ -174,12 +175,8 @@ t_rg12_per_ip_and_email() {
   local i status
   rg_reset
   for i in 1 2 3 4 5 6; do rg_register ana@example.com >/dev/null; done
-  # De dentro da rede: outro IP, o do php-fpm, chega ao mesmo nginx.
-  status="$(docker exec "$RG_FPM" php -r '
-    $ctx = stream_context_create(["http" => ["method" => "POST", "ignore_errors" => true,
-      "header" => "Content-Type: application/json\r\n", "content" => "{\"name\":\"Ana\",\"email\":\"ana@example.com\"}"]]);
-    @file_get_contents("http://nginx/users", false, $ctx);
-    echo explode(" ", http_get_last_response_headers()[0])[1];')"
+  # De dentro da rede: outro IP chega à mesma API.
+  status="$(stack_post_from_other_ip '{"name":"Ana","email":"ana@example.com"}')"
   [ "$status" = 409 ] || { note "de outro IP: $status"; return 1; }
 }
 check "RG12 limit is per ip and email" t_rg12_per_ip_and_email
@@ -228,7 +225,7 @@ t_rg16_lua_scripts() {
   awk -v dir="$tmp" '/^```lua$/{n++; on=1; next} /^```$/{on=0; next} on{print > (dir "/" n ".lua")}' "$WORK/docs/api-contract.md"
   for name in attempts reserve release; do
     n=$((n + 1))
-    cmp -s "$tmp/$n.lua" "$WORK/apis/laravel/app-modules/users/resources/lua/$name.lua" \
+    cmp -s "$tmp/$n.lua" "$(stack_lua_dir)/$name.lua" \
       || { note "$name.lua difere do bloco $n do contrato"; ok=1; }
   done
   return $ok
@@ -272,27 +269,26 @@ t_rg18_database_down() {
 check "RG18 database down answers 500 and releases" t_rg18_database_down
 
 t_rg19_queue_down() {
-  local out code secs since logs before after pending ok=0
+  local out code secs since errors before after pending ok=0
   rg_reset
   rg_register ana@example.com >/dev/null
   before="$(rg_quota_value)"
   # --since tem resolução de segundo: a espera deixa de fora o log do teste anterior.
   sleep 1
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  docker stop "$RG_RD" >/dev/null
+  stack_queue_stop
   out="$(rg_timed_post '{"name":"Bia","email":"bia@example.com"}')"
   code="${out% *}"; secs="${out#* }"
   after="$(rg_quota_value)"
   pending="$(rg_event status bia@example.com)"
-  logs="$(docker logs --since "$since" "$RG_FPM" 2>&1)"
-  docker start "$RG_RD" >/dev/null
-  rg_wait_for 60 rg_healthy "$RG_RD"
-  rg_wait_for 90 rg_healthy "$RG_HZ"
+  errors="$(stack_api_errors_since "$since")"
+  stack_queue_start
+  stack_wait_ready
   [ "$code" = 201 ] || { note "status $code: $(rg_body)"; ok=1; }
   rg_under_3s "$secs" || { note "levou ${secs}s"; ok=1; }
   rg_user_exists bia@example.com || { note "usuário não foi gravado"; ok=1; }
   [ "$pending" = pending ] || { note "evento: $pending"; ok=1; }
-  grep -qF '.ERROR' <<< "$logs" && { note "erro no log do php-fpm: $logs"; ok=1; }
+  [ -n "$errors" ] && { note "erro no log da API: $errors"; ok=1; }
   [ "$after" = "$((before + 1))" ] || { note "cota: antes $before, depois $after"; ok=1; }
   return $ok
 }
@@ -323,30 +319,7 @@ t_rg21_cors_response() {
 }
 check "RG21 cors response headers" t_rg21_cors_response
 
-# --- Horizon e a fila ---
-
-t_rg22_queue_redis() {
-  local ok=0
-  [ "$(docker inspect -f '{{.Config.Image}}' "$RG_RD")" = redis:8.10.3-alpine ] || { note "imagem do redis"; ok=1; }
-  [ "$(docker exec "$RG_RD" redis-cli CONFIG GET maxmemory-policy | tail -1)" = noeviction ] || { note "maxmemory-policy"; ok=1; }
-  [ -z "$(docker exec "$RG_RD" redis-cli CONFIG GET save | tail -1)" ] || { note "save não está vazio"; ok=1; }
-  [ "$(docker exec "$RG_RD" redis-cli CONFIG GET appendonly | tail -1)" = no ] || { note "appendonly"; ok=1; }
-  return $ok
-}
-check "RG22 queue redis config" t_rg22_queue_redis
-
-# Com o worker parado, o job fica na fila para ser lido.
-rg_with_queued_job() {
-  rg_reset
-  docker stop "$RG_HZ" >/dev/null
-  rg_register secreta@example.com 'Nome Secreto' >/dev/null
-  rg_wait_for 15 rg_queue_has
-  QUEUED="$(docker exec "$RG_RD" redis-cli LRANGE queues:registration-emails 0 -1)"
-  QUEUED_USER="$(jq -r '.data.id' "$WORK/r.body")"
-  QUEUED_ID="$(rg_event id secreta@example.com)"
-  docker start "$RG_HZ" >/dev/null
-  rg_wait_for 90 rg_healthy "$RG_HZ"
-}
+# --- A fila ---
 
 t_rg23_only_id() {
   local ok=0
@@ -361,28 +334,18 @@ t_rg23_only_id() {
 }
 check "RG23 job carries only the event id" t_rg23_only_id
 
-t_rg24_retries() {
-  local ok=0
-  rg_with_queued_job
-  [ "$(jq -r '.maxTries' <<< "$QUEUED")" = 1 ] || { note "maxTries: $(jq -r '.maxTries' <<< "$QUEUED")"; ok=1; }
-  [ "$(jq -r '.backoff' <<< "$QUEUED")" = null ] || { note "backoff: $(jq -r '.backoff' <<< "$QUEUED")"; ok=1; }
-  return $ok
-}
-check "RG24 job has no native retries" t_rg24_retries
-
 t_rg25_queue_restart() {
   rg_reset
-  docker stop "$RG_RD" >/dev/null
-  docker start "$RG_RD" >/dev/null
-  rg_wait_for 60 rg_healthy "$RG_RD" || { note "redis não voltou"; return 1; }
+  stack_queue_stop
+  stack_queue_start || { note "a fila não voltou"; return 1; }
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; return 1; }
-  rg_wait_for 60 rg_mail_arrived ana@example.com || { note "e-mail não chegou; horizon: $(health "$RG_HZ")"; return 1; }
+  rg_wait_for 60 rg_mail_arrived ana@example.com || { note "e-mail não chegou"; return 1; }
 }
 check "RG25 worker survives queue restart" t_rg25_queue_restart
 
 t_rg26_smtp_returns() {
   local ok=0
-  rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=2 || { note "make up-laravel saiu com erro"; return 1; }
+  rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=2 || { note "make up-$SUITE_STACK saiu com erro"; return 1; }
   rg_reset
   docker stop "$(container mailpit)" >/dev/null
   [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; ok=1; }
@@ -397,48 +360,6 @@ t_rg26_smtp_returns() {
   return $ok
 }
 check "RG26 mail arrives after smtp returns" t_rg26_smtp_returns
-
-t_rg27_watch_updates_worker() {
-  local before i started ok=0 view="$WORK/apis/laravel/app-modules/outbox/resources/views/welcome-text.blade.php" saved found=1 pid
-  saved="$(cat "$view")"
-  rg_reset
-  before="$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")"
-  set -m
-  make --no-print-directory -C "$WORK" watch-laravel > "$WORK/watch.log" 2>&1 &
-  pid=$!
-  set +m
-  rg_wait_for 300 grep -q 'Watch enabled' "$WORK/watch.log" || { note "watch não ficou pronto: $(tail -3 "$WORK/watch.log")"; ok=1; }
-  printf 'Texto novo vindo do watch.\n' >> "$view"
-  started=$SECONDS
-  i=0
-  while [ $((SECONDS - started)) -le 60 ]; do
-    i=$((i + 1))
-    sleep 5
-    rg_register "w$i@example.com" >/dev/null
-    rg_wait_for 8 rg_mail_arrived "w$i@example.com" \
-      && grep -qF 'Texto novo vindo do watch.' <<< "$(rg_mail_field "w$i@example.com" '.Text')" && { found=0; break; }
-  done
-  [ "$found" = 0 ] && [ $((SECONDS - started)) -le 60 ] || { note "texto novo não saiu em 60 s: $((SECONDS - started)) s"; ok=1; }
-  [ "$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")" = "$before" ] || { note "php-fpm mudou"; ok=1; }
-  kill -INT -- "-$pid" 2>/dev/null
-  rg_wait_for 30 bash -c "! kill -0 $pid 2>/dev/null"
-  printf '%s\n' "$saved" > "$view"
-  mkq up-laravel
-  return $ok
-}
-check "RG27 watch updates the worker" t_rg27_watch_updates_worker
-
-t_rg28_horizon_panel() {
-  local headers ok=0
-  headers="$(curl -s -D - -o "$WORK/horizon.html" --max-time 10 localhost:8080/horizon | tr -d '\r')"
-  grep -qE '^HTTP/[0-9.]+ 200' <<< "$headers" || { note "status: $(head -1 <<< "$headers")"; ok=1; }
-  grep -qiE '^content-type: text/html' <<< "$headers" || { note "sem Content-Type HTML"; ok=1; }
-  grep -qE '(src|href)="/' "$WORK/horizon.html" && { note "painel depende de arquivo estático"; ok=1; }
-  rg_stats_running() { [ "$(curl -s --max-time 10 localhost:8080/horizon/api/stats | jq -r '.status')" = running ]; }
-  rg_wait_for 30 rg_stats_running || { note "stats: $(curl -s localhost:8080/horizon/api/stats)"; ok=1; }
-  return $ok
-}
-check "RG28 horizon panel answers" t_rg28_horizon_panel
 
 # --- E-mail de boas-vindas ---
 
