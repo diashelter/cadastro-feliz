@@ -5,7 +5,7 @@ Run stack: `bash tests/infra/run.sh stack docs`
 Run contract: `bash tests/infra/run.sh registration outbox laravel-outbox`
 Plan: `.specs/features/contract-suite/plan.md`
 
-20 checks in 3 slices · 3 one-way doors · 0 open, of which 0 block
+21 checks in 3 slices · 3 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -62,6 +62,7 @@ Proof: run contract | PASS OB18 relay never selects terminal events
 Proof: run contract | PASS OB22 relay resumes when the queue returns
 Proof: run contract | PASS OB23 relay rollback after publish sends once
 Proof: run contract | PASS OB24 message before commit ends processed
+Proof: run stack | PASS CS13 contract cases restart what they stop
 Proof: run contract | PASS OB25 events wait for the relay
 Proof: run contract | PASS OB27 processed event and mail
 Proof: run contract | PASS OB28 mail uses the payload name
@@ -109,7 +110,7 @@ Proof: run stack | PASS CS5 stack without adapter is refused before docker
 **C8** - `docs:laravel` e `laravel-outbox:laravel` saem com `1` e `<arquivo> não é um arquivo de contrato`, com o Docker inacessível (AC 8)
 Proof: run stack | PASS CS6 suffix on a common file is refused
 
-**C9** - Um adaptador sem `stack_dispatch` faz `run.sh` sair com `1` e `adaptador <stack> sem stack_dispatch`, com o Docker inacessível; o adaptador da Laravel define todas as funções do vocabulário (AC 9)
+**C9** - Um adaptador sem qualquer uma das 22 funções do vocabulário, uma de cada vez, faz `run.sh` sair com `1` e `adaptador <stack> sem <função>`, com o Docker inacessível; o adaptador da Laravel define as 22 (AC 9)
 Proof: run stack | PASS CS7 adapter missing a function is refused
 
 **C10** - `run.sh --list` imprime exatamente `docs`, `shared`, `limiter`, `migrate`, `stack`, `frontend`, `test-frontend`, `laravel`, `registration:laravel`, `outbox:laravel`, `laravel-outbox`, uma por linha, com o Docker inacessível (AC 10)
@@ -149,8 +150,11 @@ Proof: run stack | PASS CS4 contract file without suffix uses STACK or laravel
 **C19** - Um argumento desconhecido continua recusado com `arquivo de teste desconhecido: <nome>`, inclusive com sufixo, como `rails:laravel` (validation)
 Proof: run stack | PASS CS6 suffix on a common file is refused
 
-**C20** - Um caso de contrato que para o worker, o relay ou a fila e falha no meio devolve a stack ao ar antes do caso seguinte, como hoje: OB23, que para o worker, é seguido por OB24, que precisa dele (failure modes)
+**C20** - Um caso de contrato que para o worker, o relay, a fila ou um serviço comum e falha no meio devolve tudo ao ar antes de retornar: nenhum `t_<caso>` de `registration.sh` e `outbox.sh` retorna com algo parado, e OB24 roda depois de OB23, que para o worker (failure modes)
 Proof: run contract | PASS OB24 message before commit ends processed
+
+**C21** - Uma stack só é aceita com o nome exato de um adaptador: `registration:Laravel`, `STACK=Laravel` com `registration` e `registration:../adapters/laravel` saem com `1` e `stack <nome> sem adaptador em tests/infra/adapters`, com o Docker inacessível, mesmo num disco que ignora maiúsculas (validation, achado do Verifier)
+Proof: run stack | PASS CS5 stack without adapter is refused before docker
 
 ## Coverage
 
@@ -163,13 +167,13 @@ Proof: run contract | PASS OB24 message before commit ends processed
 | vocabulário do adaptador, door 1 (22) | `stack_reset_queue` C9 · `stack_worker_stop` C9 · `stack_worker_start` C9 · `stack_relay_stop` C9 · `stack_relay_start` C9 · `stack_queue_stop` C9 · `stack_queue_start` C9 · `stack_queue_freeze` C9 · `stack_queue_unfreeze` C9 · `stack_queue_up_alone` C9 · `stack_queue_length` C9 · `stack_queued_messages` C9 · `stack_queue_connections` C9 · `stack_jobs_created` C9 · `stack_failed_jobs` C9 · `stack_dispatch` C9 · `stack_api_errors_since` C9 · `stack_worker_logs_since` C9 · `stack_relay_container` C9 · `stack_lua_dir` C9 · `stack_post_from_other_ip` C9 · `stack_wait_ready` C9 | - |
 | formato das entradas, door 2 (3) | `<arquivo>` C10 · `<arquivo>:<stack>` C10, C11 · ordem por stack C11 | - |
 | ids iguais, door 3 (2) | id sem a stack C1, C2 · cabeçalho `== <arquivo>:<stack>` C5 | - |
-| recusas de `run.sh`, AC 7 a AC 9 (8) | `registration:go` C7 · `STACK=nest` + `outbox` C7 · `registration:rails` C7 · `STACK=nest` + `docs` roda C7 · `docs:laravel` C8 · `laravel-outbox:laravel` C8 · sem `stack_dispatch` C9 · todas as funções C9 | - |
+| recusas de `run.sh`, AC 7 a AC 9 e C21 (11) | `registration:go` C7 · `STACK=nest` + `outbox` C7 · `registration:rails` C7 · `STACK=nest` + `docs` roda C7 · `docs:laravel` C8 · `laravel-outbox:laravel` C8 · sem `stack_dispatch` C9 · todas as funções C9 · `registration:Laravel` C21 · `STACK=Laravel` + `registration` C21 · `registration:../adapters/laravel` C21 | - |
 | escolha da stack, AC 6 (3 exemplos) | sem `STACK` C6 · `STACK=laravel` C6 · `STACK=` vazio C18 | - |
 | documentos (3) | docs/infrastructure.md C15 · docs/decisions.md C16 · docs/stacks.md C17 | - |
 
 ## Swept
 
-- validation: C7, C8, C9, C18, C19
+- validation: C7, C8, C9, C18, C19, C21
 - failure modes: C20; existing - cada caso de hoje já devolve o serviço que parou antes de retornar, e os casos movidos mantêm isso
 - idempotency: n/a - `run.sh` recria o ambiente a cada entrada, como hoje
 - authorization: n/a - nenhuma rota ou permissão muda

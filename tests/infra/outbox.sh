@@ -278,20 +278,27 @@ t_ob18_terminal() {
 check "OB18 relay never selects terminal events" t_ob18_terminal
 
 t_ob22_resumes() {
-  local relay sc started
+  local relay sc started ok=0
   rg_reset
   relay="$(stack_relay_container)"
   sc="$(docker inspect -f '{{.Id}}' "$relay")"
   stack_queue_stop
-  [ "$(rg_register ana@example.com)" = 201 ] || { note "status: $(rg_body)"; return 1; }
-  sleep 3
-  rg_event_is pending ana@example.com || { note "evento: $(rg_event status ana@example.com)"; return 1; }
+  # Uma falha com a fila parada só é anotada: a fila volta antes de o caso retornar.
+  if [ "$(rg_register ana@example.com)" != 201 ]; then
+    note "status: $(rg_body)"; ok=1
+  else
+    sleep 3
+    rg_event_is pending ana@example.com || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  fi
   started=$SECONDS
   stack_queue_start
-  rg_wait_for "$((60 - (SECONDS - started)))" rg_mail_arrived ana@example.com || { note "o e-mail não chegou"; return 1; }
-  [ "$(docker inspect -f '{{.Id}}' "$relay")" = "$sc" ] || { note "relay recriado"; return 1; }
-  [ "$(docker inspect -f '{{.RestartCount}}' "$relay")" = 0 ] || { note "relay reiniciou"; return 1; }
+  if [ "$ok" = 0 ]; then
+    rg_wait_for "$((60 - (SECONDS - started)))" rg_mail_arrived ana@example.com || { note "o e-mail não chegou"; ok=1; }
+    [ "$(docker inspect -f '{{.Id}}' "$relay")" = "$sc" ] || { note "relay recriado"; ok=1; }
+    [ "$(docker inspect -f '{{.RestartCount}}' "$relay")" = 0 ] || { note "relay reiniciou"; ok=1; }
+  fi
   stack_wait_ready
+  return $ok
 }
 check "OB22 relay resumes when the queue returns" t_ob22_resumes
 

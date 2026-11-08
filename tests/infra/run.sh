@@ -71,10 +71,13 @@ fi
 
 refuse() { echo "$*" >&2; exit 1; }
 
-# O adaptador existe e define todo o vocabulário. Carregado num subshell, sem efeito aqui.
+# O adaptador existe e define todo o vocabulário. Carregado num subshell, sem efeito aqui. A
+# stack precisa ser exatamente um dos nomes de --list: num disco que ignora maiúsculas, como o
+# do macOS, `Laravel` acharia o arquivo de `laravel`, e `../adapters/laravel` também.
 check_adapter() {
-  local stack="$1" missing
-  [ -f "$TESTS/adapters/$stack.sh" ] || refuse "stack $stack sem adaptador em tests/infra/adapters"
+  local stack="$1" missing s known=0
+  for s in $(adapter_stacks); do [ "$s" = "$stack" ] && known=1; done
+  [ "$known" = 1 ] || refuse "stack $stack sem adaptador em tests/infra/adapters"
   missing="$(
     # shellcheck source=/dev/null
     source "$TESTS/adapters/$stack.sh"

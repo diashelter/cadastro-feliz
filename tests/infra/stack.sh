@@ -47,6 +47,11 @@ t_cs5_no_adapter() {
   out="$(env STACK=nest DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" outbox 2>&1)"
   [ "$?" = 1 ] && [ "$out" = 'stack nest sem adaptador em tests/infra/adapters' ] || { note "STACK=nest outbox: $out"; ok=1; }
   cs_refused 'stack rails sem adaptador em tests/infra/adapters' registration:rails || ok=1
+  # Só o nome exato do adaptador: o disco do macOS ignora maiúsculas, e um caminho acharia o arquivo.
+  cs_refused 'stack Laravel sem adaptador em tests/infra/adapters' registration:Laravel || ok=1
+  cs_refused 'stack ../adapters/laravel sem adaptador em tests/infra/adapters' registration:../adapters/laravel || ok=1
+  out="$(env STACK=Laravel DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" registration 2>&1)"
+  [ "$?" = 1 ] && [ "$out" = 'stack Laravel sem adaptador em tests/infra/adapters' ] || { note "STACK=Laravel registration: $out"; ok=1; }
   # STACK só vale para arquivo de contrato: docs passa da resolução e para no Docker.
   out="$(env STACK=nest DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" docs 2>&1)"
   grep -qF 'O Docker não está acessível' <<< "$out" || { note "STACK=nest docs: $out"; ok=1; }
@@ -65,23 +70,25 @@ check "CS6 suffix on a common file is refused" t_cs6_common_suffix
 
 t_cs7_adapter_functions() {
   local ok=0 fn missing fake="$WORK/tests/infra/adapters/fake.sh"
+  local functions=(stack_reset_queue stack_worker_stop stack_worker_start stack_relay_stop stack_relay_start
+    stack_queue_stop stack_queue_start stack_queue_freeze stack_queue_unfreeze stack_queue_up_alone
+    stack_queue_length stack_queued_messages stack_queue_connections stack_jobs_created stack_failed_jobs
+    stack_dispatch stack_api_errors_since stack_worker_logs_since stack_relay_container stack_lua_dir
+    stack_post_from_other_ip stack_wait_ready)
+  [ "${#functions[@]}" = 22 ] || { note "lista com ${#functions[@]} funções"; return 1; }
   missing="$(
     # shellcheck source=/dev/null
     source "$WORK/tests/infra/adapters/laravel.sh"
-    for fn in stack_reset_queue stack_worker_stop stack_worker_start stack_relay_stop stack_relay_start \
-      stack_queue_stop stack_queue_start stack_queue_freeze stack_queue_unfreeze stack_queue_up_alone \
-      stack_queue_length stack_queued_messages stack_queue_connections stack_jobs_created stack_failed_jobs \
-      stack_dispatch stack_api_errors_since stack_worker_logs_since stack_relay_container stack_lua_dir \
-      stack_post_from_other_ip stack_wait_ready; do
-      declare -F "$fn" >/dev/null || echo "$fn"
-    done
+    for fn in "${functions[@]}"; do declare -F "$fn" >/dev/null || echo "$fn"; done
   )"
   [ -z "$missing" ] || { note "adaptador laravel sem: $missing"; ok=1; }
-  # O mesmo adaptador sem stack_dispatch.
-  awk '/^stack_dispatch\(\) \{/{skip=1} skip && /^\}/{skip=0; next} !skip' \
-    "$WORK/tests/infra/adapters/laravel.sh" > "$fake"
-  grep -q 'stack_dispatch' "$fake" && { note "o adaptador falso ainda define stack_dispatch"; ok=1; }
-  cs_refused 'adaptador fake sem stack_dispatch' registration:fake || ok=1
+  # O mesmo adaptador sem uma função de cada vez, nas 22.
+  for fn in "${functions[@]}"; do
+    awk -v fn="$fn" '$0 ~ "^"fn"\\(\\) \\{" {skip=1} skip && /\}/ {skip=0; next} !skip' \
+      "$WORK/tests/infra/adapters/laravel.sh" > "$fake"
+    if grep -qE "^$fn\(\)" "$fake"; then note "o adaptador falso ainda define $fn"; ok=1; continue; fi
+    cs_refused "adaptador fake sem $fn" registration:fake || ok=1
+  done
   rm -f "$fake"
   return $ok
 }
@@ -114,6 +121,41 @@ t_cs9_partition() {
   return $ok
 }
 check "CS9 contract and internal ids are partitioned" t_cs9_partition
+
+# Um caso de contrato que para ou congela algo nunca retorna antes de religar: o caso seguinte
+# precisa da stack inteira. Lê cada t_<caso>() em ordem, linha a linha.
+t_cs13_cases_restore() {
+  local hits
+  hits="$(cd "$WORK/tests/infra" && awk '
+    function pending(  k, s) { s = ""; for (k in pend) if (pend[k]) s = s " " k; return s }
+    /^t_[a-z0-9_]+\(\) \{/ { fn = $1; sub(/\(\).*/, "", fn); infn = 1; split("", pend); next }
+    infn && /^\}/ { if (pending() != "") print FILENAME ": " fn " termina com" pending() " parado"; infn = 0; next }
+    !infn { next }
+    {
+      line = $0
+      if (line ~ /stack_queue_start/) pend["fila"] = 0
+      if (line ~ /stack_queue_unfreeze/) pend["fila congelada"] = 0
+      if (line ~ /stack_worker_start|ob_start_workers/) pend["worker"] = 0
+      if (line ~ /stack_relay_start|ob_start_workers/) pend["relay"] = 0
+      if (line ~ /mkq "up-|rg_set_env|rg_default_env/) { pend["fila"] = 0; pend["fila congelada"] = 0; pend["worker"] = 0; pend["relay"] = 0 }
+      while (match(line, /docker (start|unpause) [^>|;]*/)) {
+        args = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        for (k in pend) if (index(args, k)) pend[k] = 0
+      }
+      line = $0
+      if (line ~ /return ([0-9]|\$ok)|return *(;|$|\})/ && pending() != "") print FILENAME ":" FNR ": " fn " retorna com" pending() " parado"
+      if (line ~ /stack_queue_stop/) pend["fila"] = 1
+      if (line ~ /stack_queue_freeze/) pend["fila congelada"] = 1
+      if (line ~ /stack_worker_stop/) pend["worker"] = 1
+      if (line ~ /stack_relay_stop/) pend["relay"] = 1
+      while (match(line, /docker (stop|pause) "[^"]*"/)) {
+        t = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        sub(/docker (stop|pause) /, "", t); pend[t] = 1
+      }
+    }' registration.sh outbox.sh)"
+  [ -z "$hits" ] || { note "$hits"; return 1; }
+}
+check "CS13 contract cases restart what they stop" t_cs13_cases_restore
 
 # Troca cada arquivo de FILES por um substituto que só diz que rodou, e com qual stack.
 cs_stub_files() {
