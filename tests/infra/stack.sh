@@ -23,7 +23,7 @@ cs_refused() {
 t_cs1_list() {
   local out expected
   expected="$(printf '%s\n' docs shared limiter migrate stack frontend test-frontend laravel \
-    registration:laravel outbox:laravel laravel-outbox)"
+    registration:laravel registration:nest outbox:laravel outbox:nest laravel-outbox nest stack-switch)"
   out="$(env DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" --list 2>&1)" || { note "saiu com erro: $out"; return 1; }
   [ "$out" = "$expected" ] || { note "lista: $(tr '\n' ' ' <<< "$out")"; return 1; }
 }
@@ -31,12 +31,13 @@ check "CS1 list prints every entry" t_cs1_list
 
 t_cs2_second_adapter() {
   local out ok=0
-  cp "$WORK/tests/infra/adapters/laravel.sh" "$WORK/tests/infra/adapters/nest.sh"
+  # Uma terceira stack, além de laravel e nest, com o adaptador da Laravel copiado.
+  cp "$WORK/tests/infra/adapters/laravel.sh" "$WORK/tests/infra/adapters/zeta.sh"
   out="$(env DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" --list 2>&1 | grep -E '^(registration|outbox):')"
-  [ "$out" = "$(printf '%s\n' registration:laravel registration:nest outbox:laravel outbox:nest)" ] \
+  [ "$out" = "$(printf '%s\n' registration:laravel registration:nest registration:zeta outbox:laravel outbox:nest outbox:zeta)" ] \
     || { note "entradas de contrato: $(tr '\n' ' ' <<< "$out")"; ok=1; }
   cmp -s "$CS_RUN" "$REPO/tests/infra/run.sh" || { note "run.sh da cópia mudou"; ok=1; }
-  rm -f "$WORK/tests/infra/adapters/nest.sh"
+  rm -f "$WORK/tests/infra/adapters/zeta.sh"
   return $ok
 }
 check "CS2 a second adapter adds its entries" t_cs2_second_adapter
@@ -44,8 +45,8 @@ check "CS2 a second adapter adds its entries" t_cs2_second_adapter
 t_cs5_no_adapter() {
   local ok=0 out
   cs_refused 'stack go sem adaptador em tests/infra/adapters' registration:go || ok=1
-  out="$(env STACK=nest DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" outbox 2>&1)"
-  [ "$?" = 1 ] && [ "$out" = 'stack nest sem adaptador em tests/infra/adapters' ] || { note "STACK=nest outbox: $out"; ok=1; }
+  out="$(env STACK=go DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" outbox 2>&1)"
+  [ "$?" = 1 ] && [ "$out" = 'stack go sem adaptador em tests/infra/adapters' ] || { note "STACK=go outbox: $out"; ok=1; }
   cs_refused 'stack rails sem adaptador em tests/infra/adapters' registration:rails || ok=1
   # Só o nome exato do adaptador: o disco do macOS ignora maiúsculas, e um caminho acharia o arquivo.
   cs_refused 'stack Laravel sem adaptador em tests/infra/adapters' registration:Laravel || ok=1
@@ -160,7 +161,7 @@ check "CS13 contract cases restart what they stop" t_cs13_cases_restore
 # Troca cada arquivo de FILES por um substituto que só diz que rodou, e com qual stack.
 cs_stub_files() {
   local name
-  for name in docs shared limiter migrate stack frontend test-frontend laravel laravel-outbox; do
+  for name in docs shared limiter migrate stack frontend test-frontend laravel laravel-outbox nest stack-switch; do
     printf 'echo "ran %s"\n' "$name" > "$WORK/tests/infra/$name.sh"
   done
   for name in registration outbox; do
@@ -176,7 +177,8 @@ t_cs3_all_entries() {
   cs_stub_files
   expected="$(printf '%s\n' 'ran docs' 'ran shared' 'ran limiter' 'ran migrate' 'ran stack' 'ran frontend' \
     'ran test-frontend' 'ran laravel' '== registration:laravel' 'ran registration laravel' \
-    '== outbox:laravel' 'ran outbox laravel' 'ran laravel-outbox')"
+    '== registration:nest' 'ran registration nest' '== outbox:laravel' 'ran outbox laravel' \
+    '== outbox:nest' 'ran outbox nest' 'ran laravel-outbox' 'ran nest' 'ran stack-switch')"
   out="$(unset STACK; cs_run)"
   [ "$out" = "$expected" ] || { note "sem argumentos: $(tr '\n' '|' <<< "$out")"; return 1; }
 }
@@ -198,9 +200,10 @@ check "CS4 contract file without suffix uses STACK or laravel" t_cs4_default_sta
 
 t_c16_missing_stack() {
   local target stack out rc ok=0
-  # A Laravel tem compose desde a base da API (.specs/features/laravel-api-base).
+  # A Laravel tem compose desde a base da API (.specs/features/laravel-api-base), e a NestJS
+  # desde .specs/features/nestjs-stack.
   for target in up down logs watch; do
-    for stack in nest go; do
+    for stack in go; do
       out="$(timeout 20 make --no-print-directory -C "$WORK" "$target-$stack" 2>&1)"
       rc=$?
       if [ "$rc" -eq 0 ] || ! grep -qF "stack $stack ainda não implementada" <<< "$out"; then
@@ -213,6 +216,19 @@ t_c16_missing_stack() {
   return $ok
 }
 check "C16 missing stack refused" t_c16_missing_stack
+
+# Com o compose da NestJS, os alvos dela passam da recusa. Sem stack no ar, down e logs não
+# sobem nada; up-nest e watch-nest são provados em nest.sh.
+t_c16b_nest_implemented() {
+  local target out ok=0
+  for target in down-nest logs-nest; do
+    out="$(timeout 20 make --no-print-directory -C "$WORK" "$target" 2>&1)"
+    grep -qF 'ainda não implementada' <<< "$out" && { note "$target recusou: $out"; ok=1; }
+    grep -qF 'desconhecida' <<< "$out" && { note "$target recusou: $out"; ok=1; }
+  done
+  return $ok
+}
+check "C16B nest targets are implemented" t_c16b_nest_implemented
 
 t_c17_unknown_stack() {
   local target out rc ok=0
