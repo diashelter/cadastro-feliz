@@ -57,7 +57,7 @@ Separar `api` e `worker` em aplicações e imagens próprias, num monorepo do Ne
 
 | Slice | Delivers | Status |
 |---|---|---|
-| [Suíte de contrato](#suíte-de-contrato) | Casos de contrato de `tests/infra` parametrizados por stack, provados primeiro só na Laravel | open — 2 defaults taken |
+| [Suíte de contrato](#suíte-de-contrato) | Casos de contrato de `tests/infra` parametrizados por stack, provados primeiro só na Laravel | done — PR #11, com os 2 defaults mantidos |
 | [`cadastro-feliz-nest`](#cadastro-feliz-nest) | `api`, `worker` e `redis` no ar, `GET /health`, fluxo de edição e testes unitários | open — 1 default taken |
 | [`POST /users`](#post-users) | Usuário e evento na mesma transação, sem a fila no caminho | clear |
 | [`outbox-relay`](#outbox-relay) | Relay no `worker`, disparado a cada segundo pelo agendador do BullMQ | clear |
