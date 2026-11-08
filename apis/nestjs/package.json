@@ -1,0 +1,36 @@
+{
+  "name": "cadastro-feliz-nestjs",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "test": "tsc --noEmit -p tsconfig.json && vitest run --reporter=verbose"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "12.0.1",
+    "@nestjs/common": "12.4.0",
+    "@nestjs/core": "12.4.0",
+    "@nestjs/platform-express": "12.4.0",
+    "@nestjs/typeorm": "12.0.3",
+    "bullmq": "5.81.5",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "ioredis": "5.11.1",
+    "nodemailer": "10.4.0",
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "typeorm": "0.3.31"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "12.0.12",
+    "@swc/cli": "0.8.2",
+    "@swc/core": "1.16.22",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.6",
+    "@types/nodemailer": "8.0.2",
+    "@types/pg": "8.23.1",
+    "typescript": "6.0.3",
+    "unplugin-swc": "2.0.0",
+    "vitest": "4.1.12"
+  }
+}
