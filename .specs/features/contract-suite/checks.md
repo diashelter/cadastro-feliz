@@ -185,3 +185,4 @@ Proof: run contract | PASS OB24 message before commit ends processed
 - **Dispatched:** none
 - **Boundary:** nothing closed yet
 - **Abandoned:** none
+- **Note:** a primeira rodada do `check_proofs.py`, em 08517fe, deu 89 pass e 9 fail: LM2, LM3, OB17, OB19 e OB38 porque `rg_set_env` usava `sed -i`, que no macOS espera um sufixo e não mudava o `.env`, e OB26 pelo mesmo `sed -i`. As duas trocas viraram `sed` com arquivo temporário. C16 e C17 de `stack.sh` só passam no macOS com um `timeout` no `PATH`, que o GNU coreutils dá no CI; as provas locais rodam com um substituto em Perl fora do repositório

@@ -245,7 +245,8 @@ t_ob26_watch_relay() {
   pid=$!
   set +m
   rg_wait_for 300 grep -q 'Watch enabled' "$WORK/watch-relay.log" || { note "watch não ficou pronto: $(tail -3 "$WORK/watch-relay.log")"; ok=1; }
-  sed -i 's/event(s) published\./event(s) relayed./' "$file"
+  # Sem `sed -i`, que no macOS espera um sufixo; o cat mantém o arquivo que o watch acompanha.
+  sed 's/event(s) published\./event(s) relayed./' "$file" > "$WORK/relay.new" && cat "$WORK/relay.new" > "$file"
   ob_new_text() { local out; out="$(docker exec "$RG_SC" php artisan outbox:relay 2>&1)"; grep -qF 'event(s) relayed.' <<< "$out"; }
   rg_wait_for 15 ob_new_text || { note "o texto novo não chegou ao scheduler"; ok=1; }
   [ "$(docker inspect -f '{{.Id}}' "$RG_SC")" = "$before" ] || { note "scheduler recriado"; ok=1; }

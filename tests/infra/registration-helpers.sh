@@ -78,11 +78,12 @@ ob_seed() {
     select id from e"
 }
 
-# Troca valores no .env da cópia de trabalho e recria a stack, com o que depende deles.
+# Troca valores no .env da cópia de trabalho e recria a stack, com o que depende deles. Sem
+# `sed -i`, que no macOS espera um sufixo e deixaria o .env como estava.
 rg_set_env() {
   local pair
   for pair in "$@"; do
-    sed -i "s|^${pair%%=*}=.*|$pair|" "$WORK/.env"
+    sed "s|^${pair%%=*}=.*|$pair|" "$WORK/.env" > "$WORK/.env.new" && mv "$WORK/.env.new" "$WORK/.env" || return 1
   done
   mkq "up-$SUITE_STACK"
 }
