@@ -4,7 +4,7 @@
 
 Prova de conceito do padrão **Transactional Outbox**, com o mesmo caso de uso construído em três stacks: **Laravel**, **NestJS** e **Go**.
 
-> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. A stack Laravel implementa o outbox: `make up-laravel` sobe `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, `POST /users` grava o usuário e o evento na mesma transação, o relay publica o evento, o Horizon envia o e-mail de boas-vindas, e `GET /health` diz se o banco e o contador respondem. NestJS e Go ainda estão em design, e os comandos delas recusam com `stack <nome> ainda não implementada`.
+> **Status: em construção.** Os serviços compartilhados (`frontend`, `postgres`, `redis-limiter`, `mailpit` e `migrate`), o schema e o `Makefile` já funcionam. O formulário de cadastro já funciona e é testado por `make test-frontend`. Os testes do frontend e da infraestrutura rodam no [CI](docs/infrastructure.md#integração-contínua) a cada pull request e a cada push na `main`. A stack Laravel implementa o outbox: `make up-laravel` sobe `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, `POST /users` grava o usuário e o evento na mesma transação, o relay publica o evento, o Horizon envia o e-mail de boas-vindas, e `GET /health` diz se o banco e o contador respondem. A stack NestJS também implementa o outbox: `make up-nest` sobe `api`, `worker` e `redis`, a `api` grava o usuário e o evento na mesma transação, e o `worker` roda o relay e envia o e-mail pelo BullMQ. As duas passam pelos mesmos testes de contrato e trocam de lugar com um evento aberto. Go ainda está em design, e os comandos dela recusam com `stack go ainda não implementada`.
 
 ## Caso de uso
 
@@ -78,7 +78,7 @@ Todas expõem também `GET /health`, que responde `200` quando o PostgreSQL e o 
 
 ## Como vai funcionar
 
-> Por enquanto só a stack Laravel tem o próprio `docker-compose.yml`; os alvos de NestJS e Go recusam até terem o deles. Com `make up-shared` e `make up-laravel`, o formulário em <http://localhost:3000> já conclui o cadastro, e o e-mail aparece em <http://localhost:8025>.
+> Por enquanto só as stacks Laravel e NestJS têm o próprio `docker-compose.yml`; os alvos de Go recusam até ela ter o dela. Com `make up-shared` e `make up-laravel` ou `make up-nest`, o formulário em <http://localhost:3000> já conclui o cadastro, e o e-mail aparece em <http://localhost:8025>.
 
 O único pré-requisito é Docker com Docker Compose 2.39 ou mais recente, além do `make`.
 
@@ -172,6 +172,24 @@ Rodar os testes da stack Laravel, sem PHP na máquina:
 make test-laravel
 ```
 
+Editar a stack NestJS com recarga automática, como na Laravel:
+
+```bash
+make watch-nest
+```
+
+Acrescentar uma dependência à stack NestJS, sem Node na máquina:
+
+```bash
+make nest-npm ARGS="install <pacote>"
+```
+
+Checar os tipos e rodar os testes da stack NestJS, sem Node na máquina:
+
+```bash
+make test-nest
+```
+
 Limpar os contadores de tentativas, para repetir testes do `429`:
 
 ```bash
@@ -203,14 +221,14 @@ cadastro-feliz/
 ├── Makefile
 ├── .env.example
 ├── docker-compose.yml        # serviços compartilhados
-├── .github/workflows/        # CI: make test-frontend e tests/infra
+├── .github/workflows/        # CI: make test-frontend, make test-laravel, make test-nest e tests/infra
 ├── database/migrations/      # schema canônico em SQL
 ├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
 ├── frontend/                 # Next.js em next dev, com o formulário
 └── apis/
     ├── laravel/              # nginx, php-fpm, scheduler, horizon, redis e os módulos
-    ├── nestjs/               # planejado
+    ├── nestjs/               # api, worker, redis, com o relay e o e-mail no worker
     └── golang/               # planejado
 ```
 

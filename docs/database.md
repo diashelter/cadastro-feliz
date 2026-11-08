@@ -1,6 +1,6 @@
 # Banco de dados
 
-> **Status:** em construção. O schema abaixo é aplicado pela migration `0001_create_users_and_users_outbox`. A stack Laravel implementa as consultas abaixo; NestJS e Go ainda vão implementá-las.
+> **Status:** em construção. O schema abaixo é aplicado pela migration `0001_create_users_and_users_outbox`. A stack Laravel implementa as consultas abaixo, e a stack NestJS também; Go ainda vai implementá-las.
 
 ## Visão geral
 

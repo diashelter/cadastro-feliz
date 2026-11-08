@@ -1,6 +1,6 @@
 # Stacks
 
-> **Status:** em construção. A [stack Laravel](#laravel) existe, com `POST /users`, `GET /health`, o relay e o Horizon. NestJS e Go estão em design: as estruturas e os containers delas são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
+> **Status:** em construção. A [stack Laravel](#laravel) existe, com `POST /users`, `GET /health`, o relay e o Horizon. A [stack NestJS](#nestjs) também existe, com `POST /users`, `GET /health`, o relay e o consumidor no `worker`. A stack Go está em design: a estrutura e os containers dela são planejados, e as versões serão fixadas na implementação. O [frontend](#frontend) já existe.
 
 ## Visão geral
 
@@ -98,6 +98,8 @@ apis/laravel/
 - **Worker:** os jobs de `registration-emails` são criados sem retentativas automáticas, porque as retentativas ficam no banco.
 - **Mesmo código, dois processos:** `api` e `worker` usam a mesma imagem, com entrypoints diferentes (`main.ts` e `worker.ts`).
 
+**Relay e worker no mesmo container:** a `api` não importa nada de fila e não abre conexão com o `redis`; só o `worker` registra o `BullModule`. O consumidor de `registration-emails` roda cada mensagem uma vez, com `attempts` `1`, `maxStalledCount` `0` e lock de 30 s, e as retentativas ficam no banco. O `redis` da stack não tem persistência, então o `worker` registra de novo o agendador `outbox-relay` quando o `redis` volta vazio. Nos testes, parar o relay ou o worker é pausar a fila dele (decisão 23).
+
 **Pontos de atenção**
 - O `ValidationPipe` retorna 400 por padrão. É preciso configurá-lo para 422.
 - Um filtro de exceções global deve produzir a [forma de erro do contrato](api-contract.md#forma-do-corpo-de-erro), com o `code` de cada erro de campo, inclusive para JSON malformado.
@@ -105,23 +107,57 @@ apis/laravel/
 
 ```txt
 apis/nestjs/
-├── docker-compose.yml
-├── Dockerfile
+├── docker-compose.yml        # api, worker, redis e a ferramenta npm
+├── Dockerfile                # node 26.13.0, com o código por cópia
+├── package.json              # versões exatas
+├── package-lock.json
+├── nest-cli.json             # watch compilado pelo SWC, sem checar tipos
+├── tsconfig.json
+├── tsconfig.build.json
+├── vitest.config.mts         # Vitest com SWC (decisão 25)
 └── src/
-    ├── main.ts
-    ├── worker.ts
+    ├── main.ts               # api: ApiModule, sem fila
+    ├── worker.ts             # worker: WorkerModule, com o BullModule
+    ├── api.module.ts
+    ├── worker.module.ts
+    ├── config.ts
+    ├── database.ts           # TypeORM sem schema próprio (decisão 24)
+    ├── queues.ts
+    ├── http/
+    │   ├── json-body.ts      # corpo malformado vira o 422 do contrato
+    │   ├── validation.ts
+    │   ├── cors.ts
+    │   └── contract-exception.filter.ts
+    ├── scripts/              # usados por tests/infra
+    │   ├── queue-control.ts
+    │   └── relay-once.ts
     └── modules/
-        ├── users/
+        ├── health/
+        │   ├── health.module.ts
+        │   └── health.controller.ts
+        ├── users/            # só da api
+        │   ├── users.module.ts
         │   ├── users.controller.ts
         │   ├── users.service.ts
         │   ├── registration-attempt-limiter.service.ts
-        │   └── dto/create-user.dto.ts
+        │   ├── registration-keys.ts
+        │   ├── user.entity.ts
+        │   ├── dto/create-user.dto.ts
+        │   └── lua/          # attempts.lua, reserve.lua e release.lua, de docs/api-contract.md
         ├── outbox/
+        │   ├── outbox.module.ts          # importado pela api e pelo worker, sem fila
+        │   ├── outbox.repository.ts
+        │   ├── user-outbox-event.entity.ts
+        │   ├── retry-delay.ts
+        │   ├── outbox-relay.module.ts    # só do worker
         │   ├── outbox-relay.processor.ts
-        │   └── outbox.repository.ts
-        └── mail/
+        │   └── relay-scheduler.service.ts
+        └── mail/             # só do worker
+            ├── mail.module.ts
             ├── registration-email.processor.ts
-            └── mail.service.ts
+            ├── mail.service.ts
+            ├── welcome-mail.ts
+            └── welcome-job.ts
 ```
 
 ## Go
@@ -212,4 +248,4 @@ cadastro-feliz/
 
 Os [cenários de validação](architecture.md#cenários-para-validar-a-implementação) cobrem o fluxo de ponta a ponta.
 
-Toda stack é aceita pelos casos de contrato de `tests/infra`, em `registration.sh` e `outbox.sh`, por meio do próprio adaptador em `tests/infra/adapters`. Os casos internos de uma stack ficam num arquivo dela, como `laravel-outbox.sh` (decisão 23 de [decisions.md](decisions.md)).
+Toda stack é aceita pelos casos de contrato de `tests/infra`, em `registration.sh` e `outbox.sh`, por meio do próprio adaptador em `tests/infra/adapters`. Os casos internos de uma stack ficam num arquivo dela, como `laravel-outbox.sh` e `nest.sh` (decisão 23 de [decisions.md](decisions.md)), e `stack-switch.sh` troca entre Laravel e NestJS.

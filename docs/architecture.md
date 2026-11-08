@@ -1,6 +1,6 @@
 # Arquitetura
 
-> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A stack Laravel implementa o outbox e o relay descritos aqui. NestJS e Go ainda não os implementam, então para elas este documento descreve o comportamento planejado.
+> **Status:** em construção. O schema, os serviços compartilhados e o formulário já existem. A stack Laravel implementa o outbox e o relay descritos aqui, e a stack NestJS também. Go ainda não os implementa, então para ela este documento descreve o comportamento planejado.
 
 ## O problema
 
