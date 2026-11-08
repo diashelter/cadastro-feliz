@@ -186,7 +186,7 @@ Proof: run stack | PASS CS5 stack without adapter is refused before docker
 ## Handoff
 
 - **Settled mid-build:** OB25 muda só o nome, para `events wait for the relay`, porque o AC 4 proíbe `scheduler` nos arquivos de contrato - user: "Renomear para relay (Recommended)"
-- **Dispatched:** Verifier at `13fb55a` (proofs 97 pass, 0 fail)
+- **Dispatched:** Verifier at `13fb55a` (proofs 97 pass, 0 fail) - returned, FAIL with 3 findings, closed in `4d546c6`
 - **Boundary:** C1-C20 closed at `13fb55a`
 - **Abandoned:** none
 - **Note:** a primeira rodada do `check_proofs.py`, em 08517fe, deu 89 pass e 9 fail: LM2, LM3, OB17, OB19 e OB38 porque `rg_set_env` usava `sed -i`, que no macOS espera um sufixo e não mudava o `.env`, e OB26 pelo mesmo `sed -i`. As duas trocas viraram `sed` com arquivo temporário. C16 e C17 de `stack.sh` só passam no macOS com um `timeout` no `PATH`, que o GNU coreutils dá no CI; as provas locais rodam com um substituto em Perl fora do repositório
