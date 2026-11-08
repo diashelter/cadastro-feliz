@@ -560,14 +560,16 @@ t_ns29_relay_failure() {
   stack_relay_stop
   a="$(ob_seed a@example.com pending '' 0 20)"
   b="$(ob_seed b@example.com pending '' 0 10)"
-  # O contador de ids de registration-emails deixa de ser um número: toda publicação nesta fila
-  # falha, e a fila outbox-relay, que dispara o relay, continua funcionando.
-  docker exec "$RG_RD" redis-cli SET bull:registration-emails:id not-a-number >/dev/null
+  # O contador de ids de registration-emails fica a um passo do limite do Redis: a primeira
+  # publicação do lote sai, e a segunda falha com overflow, no meio do lote. A fila outbox-relay,
+  # que dispara o relay, continua funcionando.
+  docker exec "$RG_RD" redis-cli SET bull:registration-emails:id 9223372036854775806 >/dev/null
   sleep 1
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   stack_relay_start
   ns_failed_logged() { local logs; logs="$(docker logs --since "$since" "$RG_WK" 2>&1)"; grep -qF 'outbox relay failed' <<< "$logs"; }
   rg_wait_for 20 ns_failed_logged || { note "log do worker sem a falha: $(docker logs --since "$since" "$RG_WK" 2>&1 | tail -3)"; ok=1; }
+  [ "$(stack_queue_length)" -ge 1 ] || { note "nenhuma publicação saiu antes da falha"; ok=1; }
   [ "$(psql_q "select string_agg(status || ':' || (published_at is null)::text, ',' order by created_at) from users_outbox")" = 'pending:true,pending:true' ] \
     || { note "eventos: $(psql_q "select string_agg(status, ',') from users_outbox")"; ok=1; }
   sleep 6
@@ -711,6 +713,9 @@ t_ns35_killed_worker() {
   id="$(rg_event id ana@example.com)"
   [ "$(rg_mail_field ana@example.com '.MessageID')" = "$id@cadastro-feliz.local" ] || { note "Message-ID: $(rg_mail_field ana@example.com '.MessageID')"; ok=1; }
   [ "$(rg_event attempts ana@example.com)" = 0 ] || { note "attempts no fim: $(rg_event attempts ana@example.com)"; ok=1; }
+  # Com maxStalledCount 0, o job interrompido vai para failed; com 1, o padrão, ele voltaria para a
+  # fila e sairia dela concluído.
+  [ "$(stack_failed_jobs)" = 1 ] || { note "jobs falhos: $(stack_failed_jobs), esperado 1, o interrompido"; ok=1; }
   rg_default_env
   stack_wait_ready
   return $ok
@@ -743,6 +748,17 @@ t_ns36_lock_outlasts_smtp() {
   return $ok
 }
 check "NS36 job lock outlasts the smtp timeout" t_ns36_lock_outlasts_smtp
+
+t_ns38_queue_redis() {
+  local ok=0
+  [ "$(docker inspect -f '{{.Config.Image}}' "$RG_RD")" = redis:8.10.3-alpine ] || { note "imagem do redis"; ok=1; }
+  [ "$(docker exec "$RG_RD" redis-cli CONFIG GET maxmemory-policy | tail -1)" = noeviction ] || { note "maxmemory-policy"; ok=1; }
+  [ -z "$(docker exec "$RG_RD" redis-cli CONFIG GET save | tail -1)" ] || { note "save não está vazio"; ok=1; }
+  [ "$(docker exec "$RG_RD" redis-cli CONFIG GET appendonly | tail -1)" = no ] || { note "appendonly"; ok=1; }
+  [ "$(docker inspect -f '{{range $k, $v := .HostConfig.Tmpfs}}{{$k}}{{end}}' "$RG_RD")" = /data ] || { note "sem tmpfs em /data"; ok=1; }
+  return $ok
+}
+check "NS38 queue redis config" t_ns38_queue_redis
 
 # --- S7 - CI ---
 

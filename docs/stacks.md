@@ -108,6 +108,8 @@ apis/laravel/
 ```txt
 apis/nestjs/
 ├── docker-compose.yml        # api, worker, redis e a ferramenta npm
+├── .dockerignore
+├── .npmrc                    # save-exact
 ├── Dockerfile                # node 26.13.0, com o código por cópia
 ├── package.json              # versões exatas
 ├── package-lock.json
@@ -126,6 +128,7 @@ apis/nestjs/
     ├── http/
     │   ├── json-body.ts      # corpo malformado vira o 422 do contrato
     │   ├── validation.ts
+    │   ├── validation.spec.ts
     │   ├── cors.ts
     │   └── contract-exception.filter.ts
     ├── scripts/              # usados por tests/infra
@@ -141,14 +144,19 @@ apis/nestjs/
         │   ├── users.service.ts
         │   ├── registration-attempt-limiter.service.ts
         │   ├── registration-keys.ts
+        │   ├── registration-keys.spec.ts
         │   ├── user.entity.ts
         │   ├── dto/create-user.dto.ts
-        │   └── lua/          # attempts.lua, reserve.lua e release.lua, de docs/api-contract.md
+        │   └── lua/          # cópias dos scripts de docs/api-contract.md
+        │       ├── attempts.lua
+        │       ├── reserve.lua
+        │       └── release.lua
         ├── outbox/
         │   ├── outbox.module.ts          # importado pela api e pelo worker, sem fila
         │   ├── outbox.repository.ts
         │   ├── user-outbox-event.entity.ts
         │   ├── retry-delay.ts
+        │   ├── retry-delay.spec.ts
         │   ├── outbox-relay.module.ts    # só do worker
         │   ├── outbox-relay.processor.ts
         │   └── relay-scheduler.service.ts
@@ -157,7 +165,9 @@ apis/nestjs/
             ├── registration-email.processor.ts
             ├── mail.service.ts
             ├── welcome-mail.ts
-            └── welcome-job.ts
+            ├── welcome-mail.spec.ts
+            ├── welcome-job.ts
+            └── welcome-job.spec.ts
 ```
 
 ## Go

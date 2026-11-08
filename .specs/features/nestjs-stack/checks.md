@@ -6,7 +6,7 @@ Run infra: `bash tests/infra/run.sh`
 Run contract: `bash tests/infra/run.sh registration:nest outbox:nest`
 Plan: `.specs/features/nestjs-stack/plan.md`
 
-50 checks in 8 slices · 8 one-way doors · 0 open, of which 0 block
+51 checks in 8 slices · 8 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -51,6 +51,9 @@ Proof: run infra | PASS NS13 nest leaves on switch and down
 
 **C13** - Um corpo JSON válido que não é objeto responde `422` com o corpo de RG4, sem consultar o banco nem contar tentativa (AC 13)
 Proof: run infra | PASS NS14 non-object json answers 422
+
+**C51** - O `redis` da stack usa `redis:8.10.3-alpine`, com `noeviction`, sem `save` nem `appendonly` e com `/data` em `tmpfs` (door 1, apontado pelo Verifier)
+Proof: run infra | PASS NS38 queue redis config
 
 ### S2 - Edição, dependências e testes unitários
 
@@ -248,7 +251,7 @@ Proof: run infra | PASS ND5 decisions record typeorm vitest and the nest adapter
 
 | Set (size) | Member -> proof | Unproven |
 | --- | --- | --- |
-| doors do plano (8) | 1 projeto Compose C1 · C2 · C9 · 2 fronteira de módulos C10 · C24 (OB6) · 3 TypeORM C8 · C50 · 4 filas e limites C28 · C35 · C36 · C37 · C38 · 5 conexões C9 · C10 · C32 · 6 adaptador C27 · C24 · C25 · 7 dependências e testes C20 · C21 · C23 · C50 · 8 arquivos de prova C26 · C42 | - |
+| doors do plano (8) | 1 projeto Compose C1 · C2 · C9 · C51 · 2 fronteira de módulos C10 · C24 (OB6) · 3 TypeORM C8 · C50 · 4 filas e limites C28 · C35 · C36 · C37 · C38 · 5 conexões C9 · C10 · C32 · 6 adaptador C27 · C24 · C25 · 7 dependências e testes C20 · C21 · C23 · C50 · 8 arquivos de prova C26 · C42 | - |
 | transições do ciclo (10) | `[*]`→`pending` C25 (OB1) · `pending`→`published` C25 (OB15) · `published`→`published` C25 (OB17) · `published`→`processed` C25 (OB27) · `published`→`pending` C25 (OB33) · `published`→`failed` C25 (LM3) · `pending`→`processed` C25 (OB24) · `pending`→`pending` C25 (OB23) · `pending`→`failed` C25 (OB31) · `failed`→`pending` C25 (LM3) | - |
 | prontidão do relay (6) | `pending` vencido C25 (OB15) · `pending` futuro C25 (OB16) · `published` expirado C25 (OB17) · terminal C25 (OB18) · travado C30 · além do lote C29 | - |
 | respostas de `GET /health` (2) | `200` C3 · C9 · `503` C4 · C5 | - |
@@ -279,7 +282,7 @@ Proof: run infra | PASS ND5 decisions record typeorm vitest and the nest adapter
 ## Handoff
 
 - **Settled mid-build:** AC 17 passa a exigir código diferente de `0`, porque o make devolve `2` quando uma receita falha - user: "Código diferente de 0 (Recomendado)". AC 31 força a falha corrompendo o contador de ids de `registration-emails`, porque `CONFIG SET maxmemory` pararia também a fila `outbox-relay`, e o relay nem rodaria - user: "Contador corrompido (Recomendado)"
-- **Dispatched:** none
+- **Dispatched:** Verifier at `cc84df5` (proofs 117 pass, 2 fail: só a suíte completa, `test-infra: falhou`, com todos os casos nomeados verdes)
 - **Boundary:** código em `43cb6a1`. No Linux, sozinhos: `nest` 39/39, `docs` 42/42 e `stack` passando; `registration:nest` e `outbox:nest` 57/57 (o OB17 só falhava com outra carga em paralelo). Faltam: `stack-switch` (SW1 a SW4) nunca rodou, `check_proofs.py` e o Verifier
 - **Abandoned:** BullMQ 6, TypeORM 1 e TypeScript 7, as versões mais novas: mudaram APIs depois do que dá para conferir aqui; ficaram BullMQ 5.81.5, TypeORM 0.3.31 e TypeScript 6.0.3, com Nest 12.4.0 (peers conferidos no npm)
 - **Ambiente da prova:** `tests/infra` exige bash 4 e ferramentas GNU, e o macOS daqui tem bash 3.2 sem os adaptadores da rodada anterior. As provas rodam num Docker-in-Docker descartável (`docker:29.0.4-dind`, com bash 5, coreutils, util-linux e Compose 2.40.3), com o repositório montado em `/repo`; o script fica fora do repositório. O dind roda com o armazenamento clássico `overlay2`, como o runner do CI: com o armazenamento do containerd, padrão do Docker 29, um build todo em cache gera outra imagem e recria os containers, o que fazia NS1 e o frontend falharem só ali

@@ -583,12 +583,13 @@ t_nd2_stacks() {
   grep -qF 'A [stack NestJS](#nestjs) também existe' <<< "$status" || { note "status sem a NestJS"; ok=1; }
   grep -qE 'NestJS e Go estão em design' <<< "$status" && { note "status ainda diz que a NestJS está em design"; ok=1; }
   body="$(section "$f" 'NestJS$')"
-  # Cada arquivo de apis/nestjs, fora node_modules e dist, aparece pelo nome na árvore da seção.
+  # Cada arquivo de apis/nestjs, em qualquer profundidade e fora node_modules e dist, aparece pelo
+  # nome numa linha da árvore da seção.
   tree="$(awk '/^```txt$/{on=1; next} on && /^```$/{exit} on' <<< "$body")"
   [ -n "$tree" ] || { note "seção NestJS sem árvore"; return 1; }
   while IFS= read -r path; do
-    grep -qE "[ ─]$(basename "$path" | sed 's/\./\\./g')( |/|$)" <<< "$tree" || { note "árvore sem $path"; ok=1; }
-  done < <(cd "$WORK/apis/nestjs" && find . -maxdepth 1 -type f ! -name '.*' | sed 's|^\./||'; cd "$WORK/apis/nestjs" && find src -maxdepth 3 -type f -name '*.ts' ! -name '*.spec.ts')
+    grep -qE "[ ─/]$(basename "$path" | sed 's/\./\\./g')( |$)" <<< "$tree" || { note "árvore sem $path"; ok=1; }
+  done < <(cd "$WORK/apis/nestjs" && find . -type f ! -path './node_modules/*' ! -path './dist/*' | sed 's|^\./||')
   return $ok
 }
 check "ND2 stacks describe the nest stack" t_nd2_stacks
@@ -617,7 +618,8 @@ t_nd4_status_lines() {
     status="$(grep -m1 -F '> **Status:**' "$WORK/docs/$f.md")"
     grep -qF 'stack NestJS também' <<< "$status" || { note "$f.md: status sem a NestJS"; ok=1; }
     grep -qF 'stack Laravel implementa' <<< "$status" || { note "$f.md: status sem a Laravel"; ok=1; }
-    grep -qE 'NestJS e Go ainda' <<< "$status" && { note "$f.md: status diz que a NestJS ainda não implementa"; ok=1; }
+    # Nenhuma frase do status que fala da NestJS diz que algo ainda falta.
+    tr '.;' '\n\n' <<< "$status" | grep -F 'NestJS' | grep -qF 'ainda' && { note "$f.md: status diz que a NestJS ainda não implementa"; ok=1; }
   done
   return $ok
 }
