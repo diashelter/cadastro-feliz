@@ -1,10 +1,7 @@
-# Ajudantes de registration.sh e outbox.sh, que também rodam sozinhos, como no CI.
+# Ajudantes de registration.sh e outbox.sh, que também rodam sozinhos, como no CI. A stack
+# é $SUITE_STACK, e tudo que é dela passa pelas funções stack_* do adaptador carregado por
+# run.sh (tests/infra/adapters/<stack>.sh).
 
-RG_NG=cadastro-feliz-laravel-nginx-1
-RG_FPM=cadastro-feliz-laravel-php-fpm-1
-RG_HZ=cadastro-feliz-laravel-horizon-1
-RG_RD=cadastro-feliz-laravel-redis-1
-RG_SC=cadastro-feliz-laravel-scheduler-1
 RG_WATCH_PID=
 
 rg_wait_for() {
@@ -15,16 +12,12 @@ rg_wait_for() {
 rg_healthy() { [ "$(health "$1")" = healthy ]; }
 rg_shared_back() { rg_wait_for 60 shared_healthy; }
 
-# Banco, contadores e caixa de e-mail vazios: cada teste parte do mesmo estado.
+# Banco, contadores, fila e caixa de e-mail vazios: cada teste parte do mesmo estado.
 rg_reset() {
   psql_q 'truncate users cascade' >/dev/null
   redis_q FLUSHALL >/dev/null
-  # Só as chaves da fila: um FLUSHALL logo depois de o horizon subir apaga o registro dos
-  # supervisores, e o master fica sem processar nada, ainda healthy.
-  docker exec "$RG_RD" redis-cli DEL queues:registration-emails queues:registration-emails:reserved \
-    queues:registration-emails:delayed queues:registration-emails:notify >/dev/null
+  stack_reset_queue
   curl -s -X DELETE --max-time 10 localhost:8025/api/v1/messages >/dev/null
-  curl -s -X DELETE --max-time 10 localhost:8080/horizon/api/jobs/failed >/dev/null
   return 0
 }
 
@@ -52,9 +45,7 @@ rg_events() { psql_q 'select count(*) from users_outbox'; }
 # rg_event <coluna> <e-mail>: o valor de uma coluna do evento de um e-mail.
 rg_event() { psql_q "select $1 from users_outbox where payload->>'email' = '$2'"; }
 rg_event_is() { [ "$(rg_event status "$2")" = "$1" ]; }
-rg_queue_len() { docker exec "$RG_RD" redis-cli LLEN queues:registration-emails; }
-rg_queue_has() { [ "$(rg_queue_len)" -ge "${1:-1}" ]; }
-rg_failed_jobs() { curl -s --max-time 10 localhost:8080/horizon/api/jobs/failed | jq -r '.jobs | length'; }
+rg_queue_has() { [ "$(stack_queue_length)" -ge "${1:-1}" ]; }
 rg_user_exists() { [ "$(psql_q "select count(*) from users where email = '$1'")" = 1 ]; }
 rg_quota_value() {
   local key
@@ -71,14 +62,42 @@ rg_mail_id() {
 }
 rg_mail_field() { curl -s --max-time 10 "localhost:8025/api/v1/message/$(rg_mail_id "$1")" | jq -r "$2"; }
 
-# Troca valores no .env da cópia de trabalho e recria o que depende deles.
+# ob_seed <e-mail> [status] [segundos desde published_at] [segundos até available_at] [segundos desde created_at]:
+# grava usuário e evento direto no banco e imprime o id do evento.
+ob_seed() {
+  local email="$1" status="${2:-pending}" published="${3:-}" available="${4:-0}" created="${5:-0}"
+  local published_at=null
+  [ -n "$published" ] && published_at="now() - make_interval(secs => $published)"
+  psql_q "with u as (insert into users (name, email) values ('Ana Souza', '$email') returning id, created_at),
+    e as (insert into users_outbox (user_id, event_type, payload, status, published_at, available_at, created_at)
+      select id, 'user.registered',
+        jsonb_build_object('user_id', id, 'name', 'Ana Souza', 'email', '$email',
+          'occurred_at', to_char(created_at at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')),
+        '$status', $published_at, now() + make_interval(secs => $available), now() - make_interval(secs => $created)
+      from u returning id)
+    select id from e"
+}
+
+# Troca valores no .env da cópia de trabalho e recria a stack, com o que depende deles.
 rg_set_env() {
   local pair
   for pair in "$@"; do
     sed -i "s|^${pair%%=*}=.*|$pair|" "$WORK/.env"
   done
-  mkq up-laravel
+  mkq "up-$SUITE_STACK"
 }
 rg_default_env() {
   rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=30 OUTBOX_REPUBLISH_AFTER_SECONDS=300 OUTBOX_BATCH_SIZE=100
+}
+
+# Com o worker parado, a mensagem fica na fila para ser lida.
+rg_with_queued_job() {
+  rg_reset
+  stack_worker_stop
+  rg_register secreta@example.com 'Nome Secreto' >/dev/null
+  rg_wait_for 15 rg_queue_has
+  QUEUED="$(stack_queued_messages)"
+  QUEUED_USER="$(jq -r '.data.id' "$WORK/r.body")"
+  QUEUED_ID="$(rg_event id secreta@example.com)"
+  stack_worker_start
 }

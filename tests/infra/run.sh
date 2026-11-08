@@ -17,13 +17,97 @@ PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
 # Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh)
+FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh laravel-outbox.sh)
 
-# `--list` imprime os nomes, um por linha, sem tocar no Docker.
+# Arquivos de contrato: valem para toda stack e rodam uma vez por adaptador de
+# tests/infra/adapters, como a entrada <arquivo>:<stack> (decisão 23 de docs/decisions.md).
+CONTRACT=(registration outbox)
+
+# O vocabulário que todo adaptador define. Os casos de contrato só agem sobre a stack por ele.
+ADAPTER_FUNCTIONS=(
+  stack_reset_queue
+  stack_worker_stop stack_worker_start
+  stack_relay_stop stack_relay_start
+  stack_queue_stop stack_queue_start stack_queue_freeze stack_queue_unfreeze stack_queue_up_alone
+  stack_queue_length stack_queued_messages stack_queue_connections stack_jobs_created stack_failed_jobs
+  stack_dispatch
+  stack_api_errors_since stack_worker_logs_since
+  stack_relay_container
+  stack_lua_dir
+  stack_post_from_other_ip
+  stack_wait_ready
+)
+
+is_contract() {
+  local c
+  for c in "${CONTRACT[@]}"; do [ "$c" = "$1" ] && return 0; done
+  return 1
+}
+
+# As stacks com adaptador, em ordem alfabética.
+adapter_stacks() {
+  local f
+  for f in "$TESTS"/adapters/*.sh; do [ -f "$f" ] && basename "$f" .sh; done | LC_ALL=C sort
+}
+
+# Todas as entradas, na ordem de FILES: um arquivo de contrato vira uma entrada por adaptador.
+all_entries() {
+  local f name s
+  for f in "${FILES[@]}"; do
+    name="${f%.sh}"
+    if is_contract "$name"; then
+      for s in $(adapter_stacks); do echo "$name:$s"; done
+    else
+      echo "$name"
+    fi
+  done
+}
+
+# `--list` imprime as entradas, uma por linha, sem tocar no Docker.
 if [ "${1:-}" = "--list" ]; then
-  printf '%s\n' "${FILES[@]%.sh}"
+  all_entries
   exit 0
 fi
+
+refuse() { echo "$*" >&2; exit 1; }
+
+# O adaptador existe e define todo o vocabulário. Carregado num subshell, sem efeito aqui.
+check_adapter() {
+  local stack="$1" missing
+  [ -f "$TESTS/adapters/$stack.sh" ] || refuse "stack $stack sem adaptador em tests/infra/adapters"
+  missing="$(
+    # shellcheck source=/dev/null
+    source "$TESTS/adapters/$stack.sh"
+    for fn in "${ADAPTER_FUNCTIONS[@]}"; do
+      declare -F "$fn" >/dev/null || { echo "$fn"; break; }
+    done
+  )"
+  [ -z "$missing" ] || refuse "adaptador $stack sem $missing"
+}
+
+# Sem argumentos, todas as entradas; com argumentos, só as nomeadas, como em
+# `bash tests/infra/run.sh docs registration:laravel`. Um arquivo de contrato sem a stack usa
+# $STACK, e `laravel` quando ela está vazia. Tudo é conferido antes de tocar no Docker.
+ENTRIES=()
+if [ "$#" -gt 0 ]; then
+  for arg in "$@"; do
+    name="${arg%%:*}"
+    [ -f "$TESTS/$name.sh" ] || refuse "arquivo de teste desconhecido: $name"
+    if [ "$arg" != "$name" ]; then
+      is_contract "$name" || refuse "$name não é um arquivo de contrato"
+      ENTRIES+=("$arg")
+    elif is_contract "$name"; then
+      ENTRIES+=("$name:${STACK:-laravel}")
+    else
+      ENTRIES+=("$name")
+    fi
+  done
+else
+  while IFS= read -r entry; do ENTRIES+=("$entry"); done < <(all_entries)
+fi
+for entry in "${ENTRIES[@]}"; do
+  [ "$entry" = "${entry%%:*}" ] || check_adapter "${entry#*:}"
+done
 
 FAILED=0
 
@@ -131,22 +215,19 @@ networks:
 YAML
 }
 
-# Sem argumentos roda todos os arquivos; com argumentos, só os nomeados, como em
-# `bash tests/infra/run.sh docs limiter`.
-if [ "$#" -gt 0 ]; then
-  FILES=()
-  for name in "$@"; do
-    [ -f "$TESTS/$name.sh" ] || { echo "arquivo de teste desconhecido: $name" >&2; exit 1; }
-    FILES+=("$name.sh")
-  done
-fi
-
-for f in "${FILES[@]}"; do
-  [ -f "$TESTS/$f" ] || continue
+# Uma entrada de contrato carrega o adaptador da stack, em $SUITE_STACK, antes do arquivo.
+for entry in "${ENTRIES[@]}"; do
+  name="${entry%%:*}"
   new_workdir
   destroy_environment
+  if [ "$entry" != "$name" ]; then
+    SUITE_STACK="${entry#*:}"
+    echo "== $entry"
+    # shellcheck source=/dev/null
+    source "$TESTS/adapters/$SUITE_STACK.sh"
+  fi
   # shellcheck source=/dev/null
-  source "$TESTS/$f"
+  source "$TESTS/$name.sh"
 done
 
 if [ "$FAILED" -ne 0 ]; then
