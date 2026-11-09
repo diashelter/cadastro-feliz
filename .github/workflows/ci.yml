@@ -1,7 +1,7 @@
 # Testes do projeto no GitHub Actions. Referência: docs/infrastructure.md › Integração contínua.
 #
-# Os jobs chamam os mesmos comandos de quem desenvolve: `make test-frontend`, `make test-laravel` e
-# `tests/infra/run.sh`. Cada arquivo de tests/infra roda em um runner próprio,
+# Os jobs chamam os mesmos comandos de quem desenvolve: `make test-frontend`, `make test-laravel`,
+# `make test-nest` e `tests/infra/run.sh`. Cada arquivo de tests/infra roda em um runner próprio,
 # porque os testes destroem e recriam o ambiente cadastro-feliz-*.
 name: CI
 
@@ -66,6 +66,27 @@ jobs:
 
       - name: make test-laravel
         run: make test-laravel
+
+  nest:
+    name: NestJS (tipos e testes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Instala o Docker Compose
+        run: |
+          dir="$HOME/.docker/cli-plugins"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          echo "$COMPOSE_SHA256  $dir/docker-compose" | sha256sum --check --strict -
+          chmod +x "$dir/docker-compose"
+          docker version --format '{{.Server.Version}}'
+          docker compose version
+
+      - name: make test-nest
+        run: make test-nest
 
   infra-suites:
     name: Lista os testes de infraestrutura

@@ -562,3 +562,85 @@ t_cs12_stacks() {
     || { note "Testes previstos sem a suíte de contrato: $body"; return 1; }
 }
 check "CS12 stacks describe the contract suite" t_cs12_stacks
+
+# --- Stack NestJS (.specs/features/nestjs-stack, S8) ---
+
+t_nd1_readme() {
+  local f="$WORK/README.md" status ok=0
+  status="$(grep -m1 -E '^> \*\*Status' "$f")"
+  grep -qF 'A stack NestJS também implementa o outbox' <<< "$status" || { note "status sem a NestJS implementando o outbox"; ok=1; }
+  grep -qF '`make up-nest` sobe `api`, `worker` e `redis`' <<< "$status" || { note "status sem os containers da NestJS"; ok=1; }
+  grep -qE 'NestJS e Go ainda|NestJS (ainda )?(está|estão) em design' <<< "$status" && { note "status ainda diz que a NestJS está em design"; ok=1; }
+  grep -qE '^ +├── nestjs/ +# api, worker, redis' "$f" || { note "árvore sem a nestjs/ descrita"; ok=1; }
+  grep -qE '^ +├── nestjs/ +# planejado' "$f" && { note "árvore com nestjs/ planejado"; ok=1; }
+  return $ok
+}
+check "ND1 readme describes the nest stack" t_nd1_readme
+
+t_nd2_stacks() {
+  local f="$WORK/docs/stacks.md" status body tree path ok=0
+  status="$(grep -m1 -F '> **Status:**' "$f")"
+  grep -qF 'A [stack NestJS](#nestjs) também existe' <<< "$status" || { note "status sem a NestJS"; ok=1; }
+  grep -qE 'NestJS e Go estão em design' <<< "$status" && { note "status ainda diz que a NestJS está em design"; ok=1; }
+  body="$(section "$f" 'NestJS$')"
+  # Cada arquivo de apis/nestjs, em qualquer profundidade e fora node_modules e dist, aparece pelo
+  # nome numa linha da árvore da seção.
+  tree="$(awk '/^```txt$/{on=1; next} on && /^```$/{exit} on' <<< "$body")"
+  [ -n "$tree" ] || { note "seção NestJS sem árvore"; return 1; }
+  while IFS= read -r path; do
+    grep -qE "[ ─/]$(basename "$path" | sed 's/\./\\./g')( |$)" <<< "$tree" || { note "árvore sem $path"; ok=1; }
+  done < <(cd "$WORK/apis/nestjs" && find . -type f ! -path './node_modules/*' ! -path './dist/*' | sed 's|^\./||')
+  return $ok
+}
+check "ND2 stacks describe the nest stack" t_nd2_stacks
+
+t_nd3_infrastructure() {
+  local f="$WORK/docs/infrastructure.md" compose make_section ci ok=0 term
+  compose="$(grep -F '| `apis/nestjs/docker-compose.yml` |' "$f")"
+  grep -qF '| `cadastro-feliz-nest` | `api`, `worker`, `redis` |' <<< "$compose" || { note "linha do compose da NestJS: $compose"; ok=1; }
+  make_section="$(section "$f" 'Makefile$')"
+  for term in '| `make nest-npm ARGS="<comando npm>"` |' '| `make test-nest` |' '| `make watch-nest` |'; do
+    grep -qF "$term" <<< "$make_section" || { note "Makefile sem $term"; ok=1; }
+  done
+  ci="$(section "$f" 'Integração contínua$')"
+  grep -qF '| NestJS (tipos e testes) | `make test-nest` |' <<< "$ci" || { note "CI sem o job da NestJS"; ok=1; }
+  for term in '`registration:nest`' '`outbox:nest`' '`nest`' '`stack-switch`'; do
+    grep -qF "$term" <<< "$ci" || { note "CI sem a entrada $term"; ok=1; }
+  done
+  grep -m1 -F '> **Status:**' "$f" | grep -qF 'O da stack NestJS existe, com `api`, `worker` e `redis`' || { note "status sem o compose da NestJS"; ok=1; }
+  return $ok
+}
+check "ND3 infrastructure describes the nest stack" t_nd3_infrastructure
+
+t_nd4_status_lines() {
+  local f status ok=0
+  for f in architecture database api-contract; do
+    status="$(grep -m1 -F '> **Status:**' "$WORK/docs/$f.md")"
+    grep -qF 'stack NestJS também' <<< "$status" || { note "$f.md: status sem a NestJS"; ok=1; }
+    grep -qF 'stack Laravel implementa' <<< "$status" || { note "$f.md: status sem a Laravel"; ok=1; }
+    # Nenhuma frase do status que fala da NestJS diz que algo ainda falta.
+    tr '.;' '\n\n' <<< "$status" | grep -F 'NestJS' | grep -qF 'ainda' && { note "$f.md: status diz que a NestJS ainda não implementa"; ok=1; }
+  done
+  return $ok
+}
+check "ND4 status lines name the nest stack" t_nd4_status_lines
+
+t_nd5_decisions() {
+  local f="$WORK/docs/decisions.md" body ok=0 term
+  grep -qxF '| [24](#24-typeorm-sem-schema-próprio-na-stack-nestjs) | TypeORM sem schema próprio na stack NestJS | Definida |' "$f" \
+    || { note "índice sem a decisão 24"; ok=1; }
+  grep -qxF '| [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |' "$f" \
+    || { note "índice sem a decisão 25"; ok=1; }
+  body="$(section "$f" '24\. TypeORM sem schema próprio na stack NestJS$')"
+  for term in '`synchronize` e `migrationsRun` ficam desligados' '`database/migrations`'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 24 sem '$term'"; ok=1; }
+  done
+  body="$(section "$f" '25\. Vitest com SWC na stack NestJS$')"
+  for term in 'unplugin-swc' 'tsc --noEmit' 'Jest'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 25 sem '$term'"; ok=1; }
+  done
+  body="$(section "$f" '23\. Suíte de contrato por stack$')"
+  grep -qF 'o adaptador `nest` para cada papel pausando a fila dele no BullMQ' <<< "$body" || { note "decisão 23 sem o adaptador nest"; ok=1; }
+  return $ok
+}
+check "ND5 decisions record typeorm vitest and the nest adapter" t_nd5_decisions

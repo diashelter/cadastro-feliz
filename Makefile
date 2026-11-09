@@ -24,6 +24,7 @@ STACK_DIR_go := apis/golang
 stack_file = $(STACK_DIR_$(1))/docker-compose.yml
 stack_compose = $(COMPOSE) -f $(call stack_file,$(1))
 LARAVEL := $(call stack_compose,laravel)
+NEST := $(call stack_compose,nest)
 
 # Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa.
 define require_stack
@@ -37,7 +38,7 @@ define stack_down
 
 endef
 
-.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel down status logs-shared reset-limits test-infra
+.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel nest-npm test-nest down status logs-shared reset-limits test-infra
 
 help:
 	@echo "Alvos:"
@@ -51,6 +52,8 @@ help:
 	@echo "  make watch-<stack>      sobe uma stack e sincroniza as edições do código com ela"
 	@echo "  make laravel-composer   roda o composer da stack Laravel: make laravel-composer ARGS=\"require <pacote>\""
 	@echo "  make test-laravel       roda os testes da stack Laravel"
+	@echo "  make nest-npm           roda o npm da stack NestJS: make nest-npm ARGS=\"install <pacote>\""
+	@echo "  make test-nest          checa os tipos e roda os testes da stack NestJS"
 	@echo "  make down               derruba tudo, menos o volume do PostgreSQL"
 	@echo "  make status             lista os containers do projeto"
 	@echo "  make logs-shared        acompanha os logs dos serviços comuns"
@@ -133,6 +136,29 @@ test-laravel: env
 		docker network create $(NETWORK) >/dev/null && created=1; \
 	fi; \
 	$(LARAVEL) build php-fpm && $(LARAVEL) run --rm --no-deps php-fpm php artisan test; \
+	status=$$?; \
+	if [ $$created = 1 ]; then docker network rm $(NETWORK) >/dev/null; fi; \
+	exit $$status
+
+# Como frontend-npm: o npm roda num container descartável, sem dependências instaladas, com o
+# usuário de quem chama o make, e só grava package.json e package-lock.json: node_modules
+# nunca vai para a máquina.
+nest-npm:
+	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make nest-npm ARGS="<comando npm>"' >&2; exit 1; }
+	$(call require_stack,nest)
+	@$(MAKE) --no-print-directory env network
+	$(NEST) run --rm --no-deps --user "$$(id -u):$$(id -g)" \
+		--env HOME=/tmp --env npm_config_package_lock_only=true npm npm $(ARGS)
+
+# Como test-laravel: constrói a imagem com o código atual e roda o type check e o Vitest num
+# container descartável, sem dependências e sem tocar na api e no worker em execução.
+test-nest: env
+	$(call require_stack,nest)
+	@created=0; \
+	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
+		docker network create $(NETWORK) >/dev/null && created=1; \
+	fi; \
+	$(NEST) build api && $(NEST) run --rm --no-deps api npm test; \
 	status=$$?; \
 	if [ $$created = 1 ]; then docker network rm $(NETWORK) >/dev/null; fi; \
 	exit $$status

@@ -1,0 +1,140 @@
+# Stack NestJS. Referência: docs/stacks.md › NestJS e .design/nestjs-stack.md.
+# Use o Makefile: ele sobe os serviços comuns e aplica o migrate antes desta stack.
+name: cadastro-feliz-nest
+
+x-node-build: &node-build
+  context: .
+  dockerfile: Dockerfile
+  # Sem a atestação de proveniência, que leva a data do build: um build sem
+  # mudanças gera a mesma imagem, e o container não é recriado à toa.
+  provenance: false
+
+# As variáveis de que a api e o worker precisam, do .env da raiz.
+x-app-env: &app-env
+  CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN}
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
+  DB_DATABASE: ${DB_DATABASE}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+  LIMITER_REDIS_HOST: ${LIMITER_REDIS_HOST}
+  LIMITER_REDIS_PORT: ${LIMITER_REDIS_PORT}
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  SMTP_HOST: ${SMTP_HOST}
+  SMTP_PORT: ${SMTP_PORT}
+  MAIL_FROM: ${MAIL_FROM}
+  REGISTRATION_MAX_ATTEMPTS: ${REGISTRATION_MAX_ATTEMPTS}
+  REGISTRATION_ATTEMPT_WINDOW_SECONDS: ${REGISTRATION_ATTEMPT_WINDOW_SECONDS}
+  REGISTRATION_MAX_PER_IP: ${REGISTRATION_MAX_PER_IP}
+  REGISTRATION_IP_WINDOW_SECONDS: ${REGISTRATION_IP_WINDOW_SECONDS}
+  OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE}
+  OUTBOX_REPUBLISH_AFTER_SECONDS: ${OUTBOX_REPUBLISH_AFTER_SECONDS}
+  OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS}
+  OUTBOX_BACKOFF_BASE_SECONDS: ${OUTBOX_BACKOFF_BASE_SECONDS}
+
+services:
+  # POST /users e GET /health (src/main.ts). Não conecta ao redis da stack (Key decision 1).
+  api:
+    build:
+      <<: *node-build
+      target: app
+    image: cadastro-feliz-nest-api
+    # O init repassa o sinal de parada ao Nest CLI, que o node ignoraria como PID 1.
+    init: true
+    ports:
+      - "${API_PORT}:8080"
+    # O limite de 1 s das conexões não cobre a resolução de nomes: sem isto, o nome de um
+    # container parado segura a requisição por 5 s quando o DNS externo não responde.
+    dns_opt: ["timeout:1", "attempts:1"]
+    environment: *app-env
+    healthcheck:
+      # Saudável é a API responder /health, com 200 ou 503: uma dependência fora
+      # do ar aparece no corpo, não como uma stack que não sobe.
+      test: ["CMD-SHELL", "wget -q -S -O /dev/null http://127.0.0.1:8080/health 2>&1 | grep -qE 'HTTP/[0-9.]+ (200|503)'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+      start_interval: 1s
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
+        - action: rebuild
+          path: ./Dockerfile
+
+  # O relay e o consumidor de registration-emails (src/worker.ts). A mesma imagem da api, sem
+  # build próprio: o Compose grava o nome do serviço na imagem, e dois builds da mesma tag a
+  # fariam alternar de ID, recriando os containers a cada subida.
+  worker:
+    image: cadastro-feliz-nest-api
+    command: ["node_modules/.bin/nest", "start", "--watch", "--preserveWatchOutput", "--entryFile", "worker"]
+    init: true
+    dns_opt: ["timeout:1", "attempts:1"]
+    environment: *app-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      # O rebuild do watch recria todo serviço com esta imagem, mas só inicia a api e o que
+      # depende dela: sem isto, o worker ficaria parado em Created.
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # O processo renova o arquivo a cada segundo enquanto a conexão dele com o redis está
+      # pronta. Sem abrir conexão nova, que contaria em total_connections_received.
+      test: ["CMD-SHELL", "[ $$(( $$(date +%s) - $$(stat -c %Y /tmp/worker-alive) )) -lt 5 ]"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 90s
+      start_interval: 1s
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+
+  # Só as filas do BullMQ, separadas do redis-limiter (decisão 5). Sem persistência: a fila é
+  # descartada com a stack, e o outbox republica o que se perdeu.
+  redis:
+    image: redis:8.10.3-alpine
+    command:
+      - redis-server
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+      start_interval: 1s
+
+  # Execução única, por `make nest-npm`: roda o npm sobre apis/nestjs, numa imagem sem
+  # dependências, e só grava package.json e package-lock.json.
+  npm:
+    profiles: ["tools"]
+    build:
+      <<: *node-build
+      target: base
+    image: cadastro-feliz-nest-base
+    volumes:
+      - ./:/app
+
+networks:
+  default:
+    name: cadastro-feliz-net
+    external: true

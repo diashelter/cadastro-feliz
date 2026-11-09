@@ -29,6 +29,8 @@
 | [21](#21-stack-laravel-sem-outbox-até-a-rodada-do-outbox) | Stack Laravel sem outbox até a rodada do outbox | Definida |
 | [22](#22-message-id-derivado-do-evento) | `Message-ID` derivado do evento | Proposta |
 | [23](#23-suíte-de-contrato-por-stack) | Suíte de contrato por stack | Definida |
+| [24](#24-typeorm-sem-schema-próprio-na-stack-nestjs) | TypeORM sem schema próprio na stack NestJS | Definida |
+| [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -285,3 +287,35 @@ Os casos de `tests/infra` que valem para qualquer stack, em `registration.sh` e 
 **Custos**
 - Toda stack precisa de um adaptador com o vocabulário inteiro, mesmo quando relay e worker dividem um processo.
 - Um caso de contrato não pode citar nada de uma stack; o OB25 trocou "scheduler" por "relay" no nome.
+
+**Na stack NestJS**
+- O relay e o worker rodam no mesmo container, o `worker`, então o adaptador `nest` para cada papel pausando a fila dele no BullMQ: `outbox-relay` para o relay e `registration-emails` para o worker. Parar o container inteiro fica provado em `nest.sh`, o arquivo interno da stack. A troca entre Laravel e NestJS, que precisa das duas stacks, fica em `stack-switch.sh` ([plano](../.specs/features/nestjs-stack/plan.md)).
+
+## 24. TypeORM sem schema próprio na stack NestJS
+
+A stack NestJS acessa o banco pelo TypeORM, mas o TypeORM nunca altera o schema: `synchronize` e `migrationsRun` ficam desligados, e não há migration do TypeORM no repositório. As entidades `User` e `UserOutboxEvent` só mapeiam `users` e `users_outbox` como `database/migrations` as cria. O detalhamento está no [design](../.design/nestjs-stack.md) e no [plano](../.specs/features/nestjs-stack/plan.md).
+
+**Motivos**
+- **Uma só fonte do schema:** `database/migrations` continua sendo a única (decisão 2), e as três stacks leem o mesmo banco.
+- **Nada reescreve as outras stacks:** um `synchronize` ligado em desenvolvimento alteraria as tabelas que a Laravel também usa.
+
+**Alternativas descartadas**
+- **Migrations do TypeORM:** duas fontes do schema, que poderiam divergir.
+- **`synchronize` em desenvolvimento:** o banco é o mesmo para as três stacks, e uma entidade errada mudaria a tabela de todas.
+
+**Custos**
+- Uma coluna nova exige mudar a migration em SQL e as entidades à mão.
+
+## 25. Vitest com SWC na stack NestJS
+
+Os testes unitários da stack NestJS usam o Vitest, o mesmo executor do frontend, compilados pelo SWC com `unplugin-swc`, como a receita oficial do Nest. `make test-nest` checa os tipos com `tsc --noEmit` e roda o Vitest num container descartável, sem banco nem Redis. O modo watch do Nest CLI também compila com o SWC, pelo `@swc/cli` e sem checar tipos, para a `api` e o `worker` subirem em segundos. O detalhamento está no [design](../.design/nestjs-stack.md).
+
+**Motivos**
+- **Um executor de testes no projeto:** o frontend já usa o Vitest.
+- **Metadados dos decorators:** o Vitest sozinho não os emite, e a injeção de dependência do Nest precisa deles; o SWC os emite.
+
+**Alternativas descartadas**
+- **Jest, o padrão do Nest CLI:** um segundo executor de testes no projeto, com outra configuração e outra saída.
+
+**Custos**
+- O SWC não checa tipos, então o `tsc --noEmit` roda antes, como no frontend.

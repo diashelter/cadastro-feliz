@@ -212,6 +212,48 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: C21 tests/infra/run.sh check_adapter (infra)
 - last seen: 2026-11-08T16:29:12Z
 
+### L-034 - Prove a worker setting like maxStalledCount by asserting the state only it produces (the job in failed), not an outcome that a stale job would reach anyway.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `tests/infra` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md finding 2 / C37 / NS35 (tests/infra)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-035 - To prove a batch is atomic, make the failure land mid-batch, after one publish succeeded, not on the first item.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `tests/infra` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md finding 3 / C31 / NS29 (tests/infra)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-036 - Every literal in a one-way door (image, policy, persistence, tmpfs) needs a check, even when a sibling stack already proves the same shape.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `tests/infra` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md finding 4 / door 1 / C51 (tests/infra)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-037 - Docs tests must read every file at any depth and refuse the wrong phrasing broadly, not match one known-bad sentence.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `tests/infra/docs.sh` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md findings 5-6 / C47 / C49 / ND2 / ND4 (tests/infra/docs.sh)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-038 - Laravel schedule:work waits for the in-flight schedule:run on SIGTERM; with everySecond tasks set TINI_KILL_PROCESS_GROUP=1 or docker stop hits the 10 s SIGKILL.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `apis/laravel/docker-compose.yml` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md finding 1 / OB41 / 95c0cdd (apis/laravel/docker-compose.yml)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-039 - BullMQ 5 schedules a job scheduler's next run in a separate call after activation; a worker killed between them orphans the scheduler, so re-register it when no next run is pending.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `apis/nestjs/src/modules/outbox` · harmful: 0
+- features: nestjs-stack
+- evidence: verification.md finding 1 / OB17 / cea106e / NS39 (apis/nestjs/src/modules/outbox)
+- last seen: 2026-11-09T06:52:02Z
+
+### L-040 - Under pipefail, capture a command's output into a variable before grep -q, or the early exit raises SIGPIPE and fails the case.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `tests/infra` · harmful: 0
+- features: nestjs-stack
+- evidence: tests/infra/laravel.sh LV34 / cc84df5 (tests/infra)
+- last seen: 2026-11-09T06:52:03Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

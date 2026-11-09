@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, e é testado por `make test-infra` e `make test-laravel`; os de NestJS e Go ainda não foram criados.
+> **Status:** em construção. O `Makefile`, o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, e o `.env.example` existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, e é testado por `make test-infra` e `make test-laravel`. O da stack NestJS existe, com `api`, `worker` e `redis`, e é testado por `make test-infra` e `make test-nest`. O da stack Go ainda não foi criado.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
@@ -82,11 +82,14 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make frontend-npm ARGS="<comando npm>"` | Roda o npm do frontend em um container descartável, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `frontend/` |
 | `make test-frontend` | Reconstrói a imagem do `frontend` com o código atual e, num container descartável, checa os tipos e roda os testes do Vitest. Não recria nem para o `frontend` em execução, e remove a rede quando foi ele que a criou |
 | `make up-laravel` | Sobe a stack Laravel, reconstruindo a imagem do `php-fpm` com o código atual |
-| `make up-nest` | Sobe a stack NestJS |
+| `make up-nest` | Sobe a stack NestJS, reconstruindo a imagem da `api` com o código atual; o `worker` usa a mesma imagem |
 | `make up-go` | Sobe a stack Go |
 | `make watch-laravel` | Sobe a stack Laravel como `make up-laravel` e fica em primeiro plano copiando cada edição de `app`, `app-modules`, `bootstrap`, `config`, `routes` e `tests` para o `php-fpm`, copiando `app`, `app-modules`, `config` e `routes` para o `scheduler`, e reiniciando o `horizon` quando muda `app`, `app-modules` ou `config`. Uma mudança em `composer.json`, `composer.lock` ou `docker/php` reconstrói a imagem e recria o `php-fpm`, o `scheduler` e o `horizon`, que dependem dele para voltarem a subir nesse momento. Ctrl+C encerra só a sincronização. A regra é genérica, `make watch-<stack>`, e recusa uma stack sem compose |
 | `make laravel-composer ARGS="<comando composer>"` | Roda o composer da stack Laravel em um container descartável, com o usuário de quem chama, sobre uma cópia de `apis/laravel`. Só `composer.json` e `composer.lock` voltam, e só quando o composer termina sem erro |
 | `make test-laravel` | Reconstrói a imagem do `php-fpm` com o código atual e roda os testes do Pest, com `php artisan test`, num container descartável, sem banco nem Redis. Não recria nem para o `php-fpm` em execução, e remove a rede quando foi ele que a criou |
+| `make watch-nest` | Sobe a stack NestJS como `make up-nest` e fica em primeiro plano copiando cada edição de `src` para a `api` e o `worker`, onde o modo watch do Nest CLI recompila e reinicia o processo. Uma mudança em `package.json`, `package-lock.json` ou `Dockerfile` reconstrói a imagem e recria a `api` e o `worker`, que depende dela para voltar a subir nesse momento. Ctrl+C encerra só a sincronização |
+| `make nest-npm ARGS="<comando npm>"` | Roda o npm da stack NestJS em um container descartável, sem dependências instaladas, com o usuário de quem chama, gravando só `package.json` e `package-lock.json` em `apis/nestjs/` |
+| `make test-nest` | Reconstrói a imagem da `api` com o código atual e, num container descartável, checa os tipos e roda os testes do Vitest, sem banco nem Redis. Não recria nem para a `api` e o `worker` em execução, e remove a rede quando foi ele que a criou |
 | `make down-laravel` | Derruba a stack Laravel |
 | `make down-nest` | Derruba a stack NestJS |
 | `make down-go` | Derruba a stack Go |
@@ -158,10 +161,11 @@ O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request
 |---|---|
 | Frontend (tipos e testes) | `make test-frontend` |
 | Laravel (testes) | `make test-laravel` |
+| NestJS (tipos e testes) | `make test-nest` |
 | Lista os testes de infraestrutura | `bash tests/infra/run.sh --list`, que imprime as entradas de `tests/infra` na ordem do `make test-infra` |
 | Infraestrutura (`<entrada>`) | `bash tests/infra/run.sh <entrada>`, um job por entrada da lista |
 
-Os testes de infraestrutura destroem e recriam o ambiente `cadastro-feliz-*`, então cada entrada roda em um runner próprio, em paralelo. A matriz vem de `run.sh --list`, e por isso um arquivo novo entra no CI quando é acrescentado à lista `FILES` de `tests/infra/run.sh`, sem mudar o workflow. Um arquivo de contrato, como `registration` e `outbox`, roda uma vez por adaptador em `tests/infra/adapters`, como a entrada `<arquivo>:<stack>`: a stack nova entra no CI quando ganha o adaptador dela (decisão 23 de [decisions.md](decisions.md)). Um push novo no mesmo branch cancela a execução anterior.
+Os testes de infraestrutura destroem e recriam o ambiente `cadastro-feliz-*`, então cada entrada roda em um runner próprio, em paralelo. A matriz vem de `run.sh --list`, e por isso um arquivo novo entra no CI quando é acrescentado à lista `FILES` de `tests/infra/run.sh`, sem mudar o workflow. Um arquivo de contrato, como `registration` e `outbox`, roda uma vez por adaptador em `tests/infra/adapters`, como a entrada `<arquivo>:<stack>`: a stack nova entra no CI quando ganha o adaptador dela (decisão 23 de [decisions.md](decisions.md)). Hoje são as entradas `registration:laravel`, `registration:nest`, `outbox:laravel` e `outbox:nest`, além dos arquivos internos `laravel-outbox` e `nest` e de `stack-switch`, que troca entre Laravel e NestJS com um evento aberto e com o limite atingido. Um push novo no mesmo branch cancela a execução anterior.
 
 ## Comunicação do frontend
 

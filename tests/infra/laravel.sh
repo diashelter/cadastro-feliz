@@ -142,7 +142,10 @@ t_lv34_ci() {
   [ -n "$install_line" ] && [ -n "$sum_line" ] && [ -n "$run_line" ] \
     && [ "$install_line" -lt "$sum_line" ] && [ "$sum_line" -lt "$run_line" ] \
     || { note "job laravel: download na linha '$install_line', checksum na '$sum_line', make test-laravel na '$run_line'"; ok=1; }
-  bash "$WORK/tests/infra/run.sh" --list | grep -qx laravel || { note "run.sh --list sem laravel"; ok=1; }
+  # Em duas etapas: com pipefail, o grep -q que sai no primeiro acerto daria SIGPIPE no run.sh.
+  local list
+  list="$(bash "$WORK/tests/infra/run.sh" --list)"
+  grep -qx laravel <<< "$list" || { note "run.sh --list sem laravel"; ok=1; }
   return $ok
 }
 check "LV34 ci runs test-laravel and laravel suite" t_lv34_ci

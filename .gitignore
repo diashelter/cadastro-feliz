@@ -6,3 +6,5 @@ frontend/.next/
 frontend/next-env.d.ts
 frontend/tsconfig.tsbuildinfo
 apis/laravel/vendor/
+apis/nestjs/node_modules/
+apis/nestjs/dist/
