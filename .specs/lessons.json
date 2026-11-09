@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 34,
+  "next_id": 41,
   "lessons": [
     {
       "id": "L-001",
@@ -598,6 +598,132 @@
       ],
       "created": "2026-11-08T16:29:12Z",
       "last_seen": "2026-11-08T16:29:12Z"
+    },
+    {
+      "id": "L-034",
+      "key": "weak_test::prove a worker setting like maxstalledcount by asserting the state only it produces the job in failed not an outcome that a stale job would reach anyway",
+      "text": "Prove a worker setting like maxStalledCount by asserting the state only it produces (the job in failed), not an outcome that a stale job would reach anyway.",
+      "signal": "weak_test",
+      "scope": "tests/infra",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md finding 2 / C37 / NS35 (tests/infra)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-035",
+      "key": "weak_test::to prove a batch is atomic make the failure land mid batch after one publish succeeded not on the first item",
+      "text": "To prove a batch is atomic, make the failure land mid-batch, after one publish succeeded, not on the first item.",
+      "signal": "weak_test",
+      "scope": "tests/infra",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md finding 3 / C31 / NS29 (tests/infra)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-036",
+      "key": "ac_gap::every literal in a one way door image policy persistence tmpfs needs a check even when a sibling stack already proves the same shape",
+      "text": "Every literal in a one-way door (image, policy, persistence, tmpfs) needs a check, even when a sibling stack already proves the same shape.",
+      "signal": "ac_gap",
+      "scope": "tests/infra",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md finding 4 / door 1 / C51 (tests/infra)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-037",
+      "key": "weak_test::docs tests must read every file at any depth and refuse the wrong phrasing broadly not match one known bad sentence",
+      "text": "Docs tests must read every file at any depth and refuse the wrong phrasing broadly, not match one known-bad sentence.",
+      "signal": "weak_test",
+      "scope": "tests/infra/docs.sh",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md findings 5-6 / C47 / C49 / ND2 / ND4 (tests/infra/docs.sh)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-038",
+      "key": "gate_fail::laravel schedule work waits for the in flight schedule run on sigterm with everysecond tasks set tini kill process group 1 or docker stop hits the 10 s sigkill",
+      "text": "Laravel schedule:work waits for the in-flight schedule:run on SIGTERM; with everySecond tasks set TINI_KILL_PROCESS_GROUP=1 or docker stop hits the 10 s SIGKILL.",
+      "signal": "gate_fail",
+      "scope": "apis/laravel/docker-compose.yml",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md finding 1 / OB41 / 95c0cdd (apis/laravel/docker-compose.yml)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-039",
+      "key": "gate_fail::bullmq 5 schedules a job scheduler s next run in a separate call after activation a worker killed between them orphans the scheduler so re register it when no next run is pending",
+      "text": "BullMQ 5 schedules a job scheduler's next run in a separate call after activation; a worker killed between them orphans the scheduler, so re-register it when no next run is pending.",
+      "signal": "gate_fail",
+      "scope": "apis/nestjs/src/modules/outbox",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "verification.md finding 1 / OB17 / cea106e / NS39 (apis/nestjs/src/modules/outbox)"
+      ],
+      "created": "2026-11-09T06:52:02Z",
+      "last_seen": "2026-11-09T06:52:02Z"
+    },
+    {
+      "id": "L-040",
+      "key": "gate_fail::under pipefail capture a command s output into a variable before grep q or the early exit raises sigpipe and fails the case",
+      "text": "Under pipefail, capture a command's output into a variable before grep -q, or the early exit raises SIGPIPE and fails the case.",
+      "signal": "gate_fail",
+      "scope": "tests/infra",
+      "status": "candidate",
+      "features": [
+        "nestjs-stack"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "tests/infra/laravel.sh LV34 / cc84df5 (tests/infra)"
+      ],
+      "created": "2026-11-09T06:52:03Z",
+      "last_seen": "2026-11-09T06:52:03Z"
     }
   ]
 }
