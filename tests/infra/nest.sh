@@ -760,6 +760,29 @@ t_ns38_queue_redis() {
 }
 check "NS38 queue redis config" t_ns38_queue_redis
 
+# O BullMQ só agenda a próxima execução depois de pegar a atual, numa chamada à parte; um worker
+# morto entre as duas deixa o agendador no redis sem nenhum job. Apagar o próximo job com o
+# worker parado reproduz esse estado: o relay tem de voltar sozinho.
+t_ns39_orphan_scheduler() {
+  local ok=0 started id
+  rg_reset
+  docker stop "$RG_WK" >/dev/null
+  for id in $(docker exec "$RG_RD" sh -c 'redis-cli ZRANGE bull:outbox-relay:delayed 0 -1; redis-cli LRANGE bull:outbox-relay:wait 0 -1'); do
+    docker exec "$RG_RD" redis-cli DEL "bull:outbox-relay:$id" >/dev/null
+  done
+  docker exec "$RG_RD" redis-cli DEL bull:outbox-relay:delayed bull:outbox-relay:wait >/dev/null
+  [ "$(docker exec "$RG_RD" redis-cli EXISTS bull:outbox-relay:repeat:outbox-relay)" = 1 ] || { note "o agendador não ficou no redis"; ok=1; }
+  ob_seed ana@example.com >/dev/null
+  started=$SECONDS
+  docker start "$RG_WK" >/dev/null
+  ns_relayed() { case "$(rg_event status ana@example.com)" in published | processed) return 0 ;; esac; return 1; }
+  rg_wait_for 15 ns_relayed || { note "evento: $(rg_event status ana@example.com)"; ok=1; }
+  [ $((SECONDS - started)) -le 15 ] || { note "levou $((SECONDS - started)) s"; ok=1; }
+  rg_wait_for 90 rg_healthy "$RG_WK"
+  return $ok
+}
+check "NS39 relay recovers a scheduler without a next job" t_ns39_orphan_scheduler
+
 # --- S7 - CI ---
 
 t_ns37_ci() {

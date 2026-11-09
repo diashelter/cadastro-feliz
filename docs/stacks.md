@@ -98,7 +98,7 @@ apis/laravel/
 - **Worker:** os jobs de `registration-emails` são criados sem retentativas automáticas, porque as retentativas ficam no banco.
 - **Mesmo código, dois processos:** `api` e `worker` usam a mesma imagem, com entrypoints diferentes (`main.ts` e `worker.ts`).
 
-**Relay e worker no mesmo container:** a `api` não importa nada de fila e não abre conexão com o `redis`; só o `worker` registra o `BullModule`. O consumidor de `registration-emails` roda cada mensagem uma vez, com `attempts` `1`, `maxStalledCount` `0` e lock de 30 s, e as retentativas ficam no banco. O `redis` da stack não tem persistência, então o `worker` registra de novo o agendador `outbox-relay` quando o `redis` volta vazio. Nos testes, parar o relay ou o worker é pausar a fila dele (decisão 23).
+**Relay e worker no mesmo container:** a `api` não importa nada de fila e não abre conexão com o `redis`; só o `worker` registra o `BullModule`. O consumidor de `registration-emails` roda cada mensagem uma vez, com `attempts` `1`, `maxStalledCount` `0` e lock de 30 s, e as retentativas ficam no banco. O `redis` da stack não tem persistência, então o `worker` registra de novo o agendador `outbox-relay` quando o `redis` volta vazio, e também quando o agendador fica sem próxima execução, o que acontece se o `worker` morre entre pegar uma execução e agendar a seguinte. Nos testes, parar o relay ou o worker é pausar a fila dele (decisão 23).
 
 **Pontos de atenção**
 - O `ValidationPipe` retorna 400 por padrão. É preciso configurá-lo para 422.

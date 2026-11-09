@@ -59,6 +59,7 @@
 | C49 | `docs.sh` `ND4 status lines name the nest stack` | no - exige só o trecho `stack NestJS também` e recusa só `NestJS e Go ainda`; "a stack NestJS também ainda não implementa o outbox" passaria |
 | C50 | `docs.sh` `ND5 decisions record typeorm vitest and the nest adapter` | yes |
 | C51 | `nest.sh` `NS38 queue redis config` | appended by the builder from finding 4, after this verification; not judged by the Verifier |
+| C52 | `nest.sh` `NS39 relay recovers a scheduler without a next job` | appended by the builder while closing finding 1 (OB17 instável), after this verification; not judged by the Verifier |
 
 ## Findings
 
