@@ -126,7 +126,9 @@ services:
   # O relay: dispara outbox:relay a cada segundo. A mesma imagem do php-fpm, sem build próprio.
   # O schedule:work só dispara na virada do minuto: o schedule:run inicial cobre esse intervalo,
   # para um container novo não ficar até 60 s sem publicar. Cada execução é um processo novo,
-  # então o watch só copia o código. O init repassa o sinal de parada, que o PHP ignoraria como PID 1.
+  # então o watch só copia o código. O init repassa o sinal de parada, que o PHP ignoraria como PID 1,
+  # ao grupo inteiro de processos: parado, o schedule:work espera o schedule:run em curso, que com a
+  # tarefa de cada segundo só acaba na virada do minuto, e o docker stop levaria os 10 s até o SIGKILL.
   scheduler:
     image: cadastro-feliz-laravel-php-fpm
     command: ["sh", "-c", "php artisan schedule:run & exec php artisan schedule:work"]
@@ -134,6 +136,7 @@ services:
     dns_opt: ["timeout:1", "attempts:1"]
     environment:
       <<: *app-env
+      TINI_KILL_PROCESS_GROUP: "1"
       # A publicação desiste em 1 s, sem retentar: uma fila travada não segura o lote aberto.
       REDIS_TIMEOUT: "1"
       REDIS_READ_TIMEOUT: "1"
