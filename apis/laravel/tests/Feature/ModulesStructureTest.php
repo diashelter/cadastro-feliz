@@ -53,6 +53,10 @@ it('has no outbox module', function () {
         ->and(is_file(base_path('app-modules/notifications/composer.json')))->toBeTrue()
         ->and(json_decode(file_get_contents(base_path('app-modules/notifications/composer.json')), true)['autoload']['psr-4'])
         ->toBe(['Modules\\Notifications\\' => 'src/']);
+
+    $packages = array_column(json_decode(file_get_contents(base_path('composer.lock')), true)['packages'], 'dist', 'name');
+    expect($packages)->not->toHaveKey('modules/outbox')
+        ->and($packages['modules/notifications']['url'] ?? null)->toBe('app-modules/notifications');
 });
 
 it('keeps notifications away from users_outbox and transactions', function () {

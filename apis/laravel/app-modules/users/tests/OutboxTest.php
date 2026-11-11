@@ -31,6 +31,17 @@ it('casts the outbox row to the enums', function () {
         ->and($event->event_type)->toBe(OutboxEventType::UserRegistered)
         ->and($event->isTerminal())->toBeTrue()
         ->and(defined(UserOutboxEvent::class.'::TERMINAL_STATUSES'))->toBeFalse();
+
+    $code = [];
+    foreach (['app', 'app-modules', 'bootstrap', 'config', 'routes'] as $dir) {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path($dir), FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->getExtension() === 'php' && ! str_contains($file->getPathname(), '/tests/')) {
+                $code[$file->getPathname()] = file_get_contents($file->getPathname());
+            }
+        }
+    }
+    expect($code)->toHaveKey(base_path('app-modules/users/src/Models/UserOutboxEvent.php'))
+        ->and(array_keys(array_filter($code, fn (string $c) => str_contains($c, 'TERMINAL_STATUSES'))))->toBe([]);
 });
 
 it('waits base times two to the previous attempts', function () {

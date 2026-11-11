@@ -131,6 +131,6 @@ Proof: run infra | PASS LV53 decision 26 records the laravel modules
 ## Handoff
 
 - **Settled mid-build:** apagar o volume `cadastro-feliz-shared_postgres-data` e a rede para o run infra - user: "Pode apagar" (2026-11-10)
-- **Dispatched:** none
+- **Dispatched:** Verifier at `77089e9` (2026-11-10)
 - **Boundary:** nenhuma check fechada. Código, testes Pest, testes de infra (OB11, LV40, LV49 a LV51, LV53, `stack_dispatch`) e docs escritos e sem commit, no branch `feat/laravel-modules-refactor`; `php -l` limpo. Falta: `make laravel-composer` para trocar `modules/outbox` por `modules/notifications` no `composer.lock`, depois `make test-laravel`, o run infra e `check_proofs.py`. Parado esperando o usuário abrir o Docker Desktop (2026-11-10)
 - **Abandoned:** os nomes de teste de C1 e C6, longos demais: com o tempo ao lado, o Pest os corta em ~66 colunas e a linha da prova não casaria; as linhas de prova foram encurtadas junto, sem mudar as afirmações
