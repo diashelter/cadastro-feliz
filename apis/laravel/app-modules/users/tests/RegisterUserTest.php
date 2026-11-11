@@ -1,12 +1,15 @@
 <?php
 
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Bus;
 use Modules\Users\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Models\User;
+use Modules\Users\Repositories\OutboxRepository;
 use Modules\Users\Repositories\UserRepository;
 use Modules\Users\Services\RegistrationLimiter;
+use Modules\Users\UseCases\RegisterUser;
 
 function fakeUser(): User
 {
@@ -31,6 +34,14 @@ function fakeUsers(): Mockery\MockInterface
 {
     return test()->mock(UserRepository::class);
 }
+
+// Sem PostgreSQL: a transação de RegisterUser só executa o callback, e o evento não é gravado.
+beforeEach(function () {
+    $db = Mockery::mock(ConnectionInterface::class);
+    $db->shouldReceive('transaction')->andReturnUsing(fn (Closure $callback) => $callback());
+    $this->app->instance(ConnectionInterface::class, $db);
+    $this->mock(OutboxRepository::class)->shouldReceive('recordUserRegistered')->byDefault();
+});
 
 it('answers 201 and publishes no job', function () {
     Bus::fake();
@@ -122,6 +133,16 @@ it('answers 500 without internal detail when the database fails', function () {
 
     $response->assertStatus(500);
     expect($response->getContent())->toBe('{"message":"Internal server error.","errors":[]}');
+});
+
+it('answers 201 through the register user use case', function () {
+    $this->mock(RegisterUser::class)->shouldReceive('execute')->once()
+        ->with('Ana Souza', 'ana@example.com', '127.0.0.1')->andReturn(fakeUser());
+
+    $response = $this->postJson('/users', ['name' => 'Ana Souza', 'email' => 'ana@example.com']);
+
+    $response->assertStatus(201);
+    expect($response->json('data.id'))->toBe('0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e');
 });
 
 it('denies the horizon panel outside local', function () {

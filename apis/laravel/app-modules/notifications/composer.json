@@ -1,0 +1,20 @@
+{
+    "name": "modules/notifications",
+    "description": "O e-mail de boas-vindas, consumidor do evento user.registered de users.",
+    "type": "library",
+    "version": "1.0",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Notifications\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Notifications\\Providers\\NotificationsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable"
+}

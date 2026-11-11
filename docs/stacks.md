@@ -27,6 +27,8 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 **O que já existe.** A stack roda Laravel 13 sobre PHP 8.5 e tem dois endpoints: [`GET /health`](api-contract.md#get-health) e `POST /users`, com validação, limites, forma única de erro e CORS. Cada cadastro grava em `users` e `users_outbox` na mesma transação, o `scheduler` publica o evento no `redis`, e o `horizon` envia o e-mail.
 
 - **Módulos:** cada módulo é um pacote `modules/<nome>` em `app-modules`, carregado pelo `internachi/modular`, com o namespace `Modules\`. Nenhum módulo tem migrations (decisão 2).
+- **Contextos:** `users` é o cadastro e é dono de `users_outbox`: grava o evento, roda o relay e é o único que escreve na tabela. `notifications` envia o e-mail de boas-vindas e só informa a `users` se o envio deu certo ou falhou. `notifications` se registra como consumidor de `user.registered`, e `users` nunca depende de `notifications` (decisão 26).
+- **Casos de uso:** cada operação é uma classe em `src/UseCases`, com um método `execute`, que abre a própria transação; os repositórios só executam consultas. Status e tipos de evento ficam nos enums de `src/Enums`.
 
 - **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição, e reinicia o `horizon`, porque um worker de longa duração não recarrega o código. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
 - **Dependências:** `make laravel-composer ARGS="<comando composer>"` é o único caminho, e só `composer.json` e `composer.lock` mudam na máquina.
@@ -34,7 +36,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
 
 **Como o outbox funciona aqui**
-- **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`, com a saída enviada ao log do container. Ele faz a seleção do lote e o `dispatch` de `SendWelcomeEmailJob`. O cache da stack é `array`, então `withoutOverlapping()` só vale dentro de um processo: quem impede duas execuções de publicar a mesma linha é o `SKIP LOCKED`.
+- **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`, com a saída enviada ao log do container. Ele faz a seleção do lote e o `dispatch` do job que o consumidor de cada tipo registrou em `OutboxConsumers`, hoje `SendWelcomeEmailJob`; um tipo sem consumidor faz a rodada falhar sem publicar nada. O cache da stack é `array`, então `withoutOverlapping()` só vale dentro de um processo: quem impede duas execuções de publicar a mesma linha é o `SKIP LOCKED`.
 - **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco.
 - **Limites de tempo:** 5 s do SMTP, 60 s do `timeout` do Horizon, 90 s do `retry_after` e 300 s de `OUTBOX_REPUBLISH_AFTER_SECONDS`, nessa ordem. Assim, um SMTP travado conta como tentativa, e um envio em andamento não é republicado.
 
@@ -64,24 +66,24 @@ apis/laravel/
     │   ├── src/Checks/
     │   ├── src/Http/Controllers/HealthController.php
     │   └── tests/
-    ├── outbox/               # o evento, o relay e o e-mail de boas-vindas
+    ├── notifications/        # o e-mail de boas-vindas, consumidor de user.registered
     │   ├── resources/views/
-    │   ├── src/Console/Commands/RelayOutboxCommand.php
     │   ├── src/Jobs/SendWelcomeEmailJob.php
     │   ├── src/Mail/WelcomeMail.php
-    │   ├── src/Models/UserOutboxEvent.php
-    │   ├── src/Repositories/OutboxRepository.php
-    │   ├── src/Services/RetryPolicy.php
+    │   ├── src/Providers/NotificationsServiceProvider.php
+    │   ├── src/UseCases/SendWelcomeEmail.php
     │   └── tests/
-    └── users/                # POST /users, com os limites
+    └── users/                # POST /users, os limites, users_outbox e o relay
         ├── resources/lua/    # cópias dos scripts do contrato
         ├── routes/users-routes.php
-        ├── src/Actions/RegisterUserAction.php
+        ├── src/Console/Commands/RelayOutboxCommand.php
+        ├── src/Enums/        # OutboxStatus e OutboxEventType
         ├── src/Http/Controllers/UserController.php
         ├── src/Http/Requests/StoreUserRequest.php
-        ├── src/Models/User.php
-        ├── src/Repositories/UserRepository.php
-        ├── src/Services/RegistrationLimiter.php
+        ├── src/Models/       # User e UserOutboxEvent
+        ├── src/Repositories/ # UserRepository e OutboxRepository
+        ├── src/Services/     # RegistrationLimiter, RetryPolicy e OutboxConsumers
+        ├── src/UseCases/     # RegisterUser e RelayOutboxEvents
         └── tests/
 ```
 

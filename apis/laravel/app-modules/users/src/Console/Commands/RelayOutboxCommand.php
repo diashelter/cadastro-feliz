@@ -1,25 +1,23 @@
 <?php
 
-namespace Modules\Outbox\Console\Commands;
+namespace Modules\Users\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
-use Modules\Outbox\Jobs\SendWelcomeEmailJob;
-use Modules\Outbox\Repositories\OutboxRepository;
+use Modules\Users\UseCases\RelayOutboxEvents;
 use Throwable;
 
-/** O relay: agendado a cada segundo, só publica; o SMTP fica no job. */
+/** O relay: agendado a cada segundo, só publica; o envio fica com quem consome o evento. */
 class RelayOutboxCommand extends Command
 {
     protected $signature = 'outbox:relay';
 
     protected $description = 'Publica na fila os eventos prontos de users_outbox';
 
-    public function handle(OutboxRepository $events): int
+    public function handle(RelayOutboxEvents $relay): int
     {
         try {
-            $published = $events->publishReady(fn (string $id) => Bus::dispatch(new SendWelcomeEmailJob($id)));
+            $published = $relay->execute();
         } catch (Throwable $e) {
             Log::error('outbox relay failed', ['error' => $e->getMessage()]);
 

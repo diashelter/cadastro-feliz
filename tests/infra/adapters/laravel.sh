@@ -50,7 +50,7 @@ stack_failed_jobs() { curl -s --max-time 10 localhost:8080/horizon/api/jobs/fail
 
 # Publica uma mensagem na fila sem passar pelo relay.
 stack_dispatch() {
-  docker exec "$RG_HZ" php artisan tinker --execute "dispatch(new \\Modules\\Outbox\\Jobs\\SendWelcomeEmailJob('$1'));" >/dev/null
+  docker exec "$RG_HZ" php artisan tinker --execute "dispatch(new \\Modules\\Notifications\\Jobs\\SendWelcomeEmailJob('$1'));" >/dev/null
 }
 
 # As linhas de erro do log da API desde <ts>. Em duas etapas: com pipefail, um grep que

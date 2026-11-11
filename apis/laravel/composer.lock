@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "34bddf50bdc5e4098afb6823a7f2b371",
+    "content-hash": "22cd41ea288eaae3b5dc707b68adbf98",
     "packages": [
         {
             "name": "brick/math",
@@ -3110,23 +3110,30 @@
             }
         },
         {
-            "name": "modules/outbox",
+            "name": "modules/notifications",
             "version": "1.0",
             "dist": {
                 "type": "path",
-                "url": "app-modules/outbox",
-                "reference": "6d4fef4c766d35c2a4ff1717ff1de9e100865965"
+                "url": "app-modules/notifications",
+                "reference": "ca4fae8ee372c1fe03e4a866561e7a7e0e6ca4c2"
             },
             "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Modules\\Notifications\\Providers\\NotificationsServiceProvider"
+                    ]
+                }
+            },
             "autoload": {
                 "psr-4": {
-                    "Modules\\Outbox\\": "src/"
+                    "Modules\\Notifications\\": "src/"
                 }
             },
             "license": [
                 "proprietary"
             ],
-            "description": "O evento em users_outbox, o relay e o envio do e-mail de boas-vindas.",
+            "description": "O e-mail de boas-vindas, consumidor do evento user.registered de users.",
             "transport-options": {
                 "symlink": true,
                 "relative": true

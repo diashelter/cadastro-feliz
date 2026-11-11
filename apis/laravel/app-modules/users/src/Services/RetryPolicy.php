@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Outbox\Services;
+namespace Modules\Users\Services;
 
 /** A espera antes de uma nova tentativa de envio (decisão 9 de docs/decisions.md). */
 class RetryPolicy

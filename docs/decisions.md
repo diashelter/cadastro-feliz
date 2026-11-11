@@ -31,6 +31,7 @@
 | [23](#23-suíte-de-contrato-por-stack) | Suíte de contrato por stack | Definida |
 | [24](#24-typeorm-sem-schema-próprio-na-stack-nestjs) | TypeORM sem schema próprio na stack NestJS | Definida |
 | [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |
+| [26](#26-módulos-da-stack-laravel-por-contexto) | Módulos da stack Laravel por contexto | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -319,3 +320,23 @@ Os testes unitários da stack NestJS usam o Vitest, o mesmo executor do frontend
 
 **Custos**
 - O SWC não checa tipos, então o `tsc --noEmit` roda antes, como no frontend.
+
+## 26. Módulos da stack Laravel por contexto
+
+Os módulos da stack Laravel seguem os contextos do domínio. `users` é o cadastro: grava o usuário e o evento, é dono de `users_outbox` e roda o relay. `notifications` envia o e-mail de boas-vindas. O módulo `outbox` deixou de existir, porque o outbox é o mecanismo de publicação do cadastro, não um contexto próprio. O detalhamento está no [plano](../.specs/features/laravel-modules-refactor/plan.md).
+
+- **Direção:** `notifications` depende de `users`, nunca o contrário. `notifications` se registra em `OutboxConsumers` como consumidor de `user.registered`, e o relay publica o job que o consumidor registrou. Um tipo sem consumidor faz a rodada do relay falhar sem publicar nada.
+- **Dono da tabela:** só `users` escreve em `users_outbox`. `notifications` lê o evento e informa sucesso ou falha pelo `OutboxRepository` de `users`, que decide status, tentativas e espera (decisão 9).
+- **Casos de uso:** cada operação é um caso de uso em `src/UseCases`, que abre a própria transação; os repositórios não abrem transação. Status e tipos de evento ficam em enums.
+
+**Motivos**
+- **A transação fica num módulo só:** o cadastro grava usuário e evento juntos, e com o outbox em outro módulo essa transação atravessava dois.
+- **O e-mail é uma reação ao cadastro:** um segundo consumidor de `user.registered` entra em `notifications`, ou num módulo novo, sem mudar `users`.
+
+**Alternativas descartadas**
+- **Juntar tudo em `users`:** mais simples, mas mistura o envio do e-mail ao cadastro.
+- **Manter `users` e `outbox`:** a transação do cadastro atravessa dois módulos, e o outbox não é um contexto.
+
+**Custos**
+- `notifications` depende do `OutboxRepository` de `users` para registrar o resultado do envio, porque o status de entrega mora na linha do evento (decisão 9).
+- A classe do job mudou de namespace: uma mensagem antiga que estiver na fila na troca falha no Horizon, e o evento é republicado depois de `OUTBOX_REPUBLISH_AFTER_SECONDS`.
