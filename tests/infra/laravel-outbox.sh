@@ -48,7 +48,7 @@ t_rg24_retries() {
 check "RG24 job has no native retries" t_rg24_retries
 
 t_rg27_watch_updates_worker() {
-  local before i started ok=0 view="$WORK/apis/laravel/app-modules/outbox/resources/views/welcome-text.blade.php" saved found=1 pid
+  local before i started ok=0 view="$WORK/apis/laravel/app-modules/notifications/resources/views/welcome-text.blade.php" saved found=1 pid
   saved="$(cat "$view")"
   rg_reset
   before="$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")"
@@ -100,12 +100,13 @@ t_ob9_publisher_gone() {
 check "OB9 publisher class is gone" t_ob9_publisher_gone
 
 t_ob11_one_way() {
-  [ -d "$OB_LV/app-modules/outbox/src" ] || { note "sem o módulo outbox"; return 1; }
-  if grep -rqE 'Modules\\+Users' "$OB_LV/app-modules/outbox"; then
-    note "outbox referencia Modules\\Users"; return 1
+  [ -d "$OB_LV/app-modules/users/src" ] || { note "sem o módulo users"; return 1; }
+  [ -d "$OB_LV/app-modules/notifications/src" ] || { note "sem o módulo notifications"; return 1; }
+  if grep -rqE 'Modules\\+Notifications' "$OB_LV/app-modules/users"; then
+    note "users referencia Modules\\Notifications"; return 1
   fi
 }
-check "OB11 outbox module does not reference users" t_ob11_one_way
+check "OB11 users module does not reference notifications" t_ob11_one_way
 
 t_ob13_scheduler() {
   local ok=0 list
@@ -236,7 +237,7 @@ t_ob41_scheduler_start() {
 check "OB41 scheduler publishes right after it starts" t_ob41_scheduler_start
 
 t_ob26_watch_relay() {
-  local ok=0 before pid saved file="$OB_LV/app-modules/outbox/src/Console/Commands/RelayOutboxCommand.php"
+  local ok=0 before pid saved file="$OB_LV/app-modules/users/src/Console/Commands/RelayOutboxCommand.php"
   saved="$(cat "$file")"
   rg_reset
   before="$(docker inspect -f '{{.Id}}' "$RG_SC")"

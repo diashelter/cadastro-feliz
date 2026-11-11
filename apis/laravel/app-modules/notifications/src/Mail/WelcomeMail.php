@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Outbox\Mail;
+namespace Modules\Notifications\Mail;
 
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -18,7 +18,7 @@ class WelcomeMail extends Mailable
 
     public function content(): Content
     {
-        return new Content(html: 'outbox::welcome', text: 'outbox::welcome-text');
+        return new Content(html: 'notifications::welcome', text: 'notifications::welcome-text');
     }
 
     /** O mesmo evento sai sempre com o mesmo Message-ID, nas três stacks (decisão 22). */

@@ -110,7 +110,7 @@ check "LV48 health tests are pest in the module" t_lv48_health_tests_pest
 t_lv49_modular_locked() {
   local name ok=0
   [ "$(lock_version internachi/modular)" = 3.0.2 ] || { note "modular: $(lock_version internachi/modular)"; ok=1; }
-  for name in health outbox users; do
+  for name in health notifications users; do
     [ "$(jq -r --arg n "modules/$name" '.packages[] | select(.name == $n) | .dist.url' "$LV/composer.lock")" = "app-modules/$name" ] \
       || { note "modules/$name não vem de app-modules"; ok=1; }
   done
@@ -122,7 +122,7 @@ t_lv50_modules_layout() {
   local name ok=0
   [ ! -e "$LV/app/Modules" ] || { note "app/Modules existe"; ok=1; }
   [ ! -e "$LV/routes/api.php" ] || { note "routes/api.php existe"; ok=1; }
-  for name in health outbox users; do
+  for name in health notifications users; do
     [ -f "$LV/app-modules/$name/composer.json" ] || { note "$name sem composer.json"; ok=1; }
     [ -d "$LV/app-modules/$name/src" ] || { note "$name sem src"; ok=1; }
   done
@@ -176,7 +176,7 @@ check "LV1 up-laravel on clean clone" t_lv1_clean_clone
 
 t_lv51_image_modules() {
   local name
-  for name in health outbox users; do
+  for name in health notifications users; do
     docker exec "$FPM" test -e "/var/www/html/vendor/modules/$name/composer.json" || { note "vendor sem modules/$name"; return 1; }
   done
 }

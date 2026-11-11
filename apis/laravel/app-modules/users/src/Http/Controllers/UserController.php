@@ -4,10 +4,10 @@ namespace Modules\Users\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\Actions\RegisterUserAction;
 use Modules\Users\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Http\Requests\StoreUserRequest;
+use Modules\Users\UseCases\RegisterUser;
 use Throwable;
 
 /**
@@ -16,10 +16,10 @@ use Throwable;
  */
 class UserController
 {
-    public function store(StoreUserRequest $request, RegisterUserAction $register): JsonResponse
+    public function store(StoreUserRequest $request, RegisterUser $register): JsonResponse
     {
         try {
-            $user = $register($request->string('name')->value(), $request->string('email')->value(), (string) $request->ip());
+            $user = $register->execute($request->string('name')->value(), $request->string('email')->value(), (string) $request->ip());
         } catch (EmailAlreadyTaken) {
             return response()->json([
                 'message' => StoreUserRequest::MESSAGES['email']['already_taken'],

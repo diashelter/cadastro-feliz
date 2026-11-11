@@ -394,7 +394,7 @@ t_lv39_readme() {
 check "LV39 readme describes laravel base" t_lv39_readme
 
 t_lv40_stacks() {
-  local body row service term ok=0
+  local body row service term users_tree ok=0
   body="$(section "$WORK/docs/stacks.md" 'Laravel$')"
   for service in nginx php-fpm scheduler horizon redis; do
     row="$(grep -E "^\| \`$service\` \|" <<< "$body" | head -1)"
@@ -403,14 +403,39 @@ t_lv40_stacks() {
   grep -qF 'SendWelcomeEmailJob' <<< "$body" || { note "stacks.md › Laravel sem SendWelcomeEmailJob"; ok=1; }
   grep -qF 'SendRegistrationEmailJob' <<< "$body" && { note "stacks.md › Laravel ainda cita SendRegistrationEmailJob"; ok=1; }
   grep -qF 'WelcomeEmailPublisher' <<< "$body" && { note "stacks.md › Laravel ainda cita WelcomeEmailPublisher"; ok=1; }
-  grep -qF 'outbox/' <<< "$body" || { note "árvore sem app-modules/outbox"; ok=1; }
-  grep -qF 'src/Console/Commands/RelayOutboxCommand.php' <<< "$body" || { note "árvore sem o caminho do relay"; ok=1; }
+  grep -qF '├── notifications/' <<< "$body" || { note "árvore sem notifications/"; ok=1; }
+  # Só a subárvore de users/, que é a última da árvore: a de notifications também tem src/UseCases/.
+  users_tree="$(sed -n '/└── users\//,/^```/p' <<< "$body")"
+  for term in 'src/UseCases/' 'src/Enums/' 'src/Console/Commands/RelayOutboxCommand.php'; do
+    grep -qF "$term" <<< "$users_tree" || { note "árvore de users/ sem '$term'"; ok=1; }
+  done
+  for term in '── outbox/' 'src/Actions' 'RegisterUserAction'; do
+    grep -qF "$term" <<< "$body" && { note "stacks.md › Laravel ainda cita '$term'"; ok=1; }
+  done
+  grep -E '^- \*\*Contextos:\*\*' <<< "$body" | grep -qF 'users` nunca depende de `notifications' \
+    || { note "stacks.md › Laravel sem o item de contextos com a direção da dependência"; ok=1; }
+  grep -E '^- \*\*Contextos:\*\*' <<< "$body" | grep -qF 'dono de `users_outbox`' \
+    || { note "stacks.md › Laravel sem o dono de users_outbox"; ok=1; }
+  grep -E '^- \*\*Contextos:\*\*' <<< "$body" | grep -qF '`notifications` envia o e-mail de boas-vindas' \
+    || { note "stacks.md › Laravel sem o papel de notifications"; ok=1; }
   for term in 'GET /health' 'make watch-laravel' 'make laravel-composer' 'app-modules' 'Pest'; do
     grep -qF "$term" <<< "$body" || { note "stacks.md › Laravel sem '$term'"; ok=1; }
   done
   return $ok
 }
 check "LV40 stacks docs describe laravel stack" t_lv40_stacks
+
+t_lv53_decision26() {
+  local f="$WORK/docs/decisions.md" body ok=0
+  grep -qF '| [26](#26-módulos-da-stack-laravel-por-contexto) | Módulos da stack Laravel por contexto |' "$f" || { note "índice sem a decisão 26"; ok=1; }
+  body="$(section "$f" '26\. Módulos da stack Laravel por contexto$')"
+  [ -n "$body" ] || { note "sem a seção da decisão 26"; return 1; }
+  for term in '**Motivos**' '**Alternativas descartadas**' '**Custos**' '`notifications`' '`users`' 'outbox' '**Juntar tudo em `users`:**' '**Manter `users` e `outbox`:**'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 26 sem '$term'"; ok=1; }
+  done
+  return $ok
+}
+check "LV53 decision 26 records the laravel modules" t_lv53_decision26
 
 t_lv41_help() {
   local out term
