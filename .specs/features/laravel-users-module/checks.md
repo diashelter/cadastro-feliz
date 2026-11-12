@@ -121,6 +121,6 @@ Proof: run infra | PASS LV53 decision 26 records the single laravel module
 ## Handoff
 
 - **Settled mid-build:** none
-- **Dispatched:** none
-- **Boundary:** nenhuma check fechada
-- **Abandoned:** none
+- **Dispatched:** Verifier at `3cb85d2` (2026-11-11)
+- **Boundary:** C1-C15, C17-C19 verdes em `proofs.md` at `3cb85d2`. C16 vermelha só no agregado `test-infra: todos os testes passaram`: o run infra completo deu 162 PASS e 3 FAIL, LV7, LV24 e LV27, que usam `stat -c` e `sed -i` do GNU, ausentes no macOS, em trechos que esta mudança não toca - as mesmas três da rodada `laravel-modules-refactor`, cuja C20 fechou no CI. OB11, RG27, LV40, LV49 a LV51, LV53, OB19, OB21 e LM2 passaram. A prova de C16 no Linux depende de push e CI, que pedem o aval do responsável
+- **Abandoned:** a primeira rodada de `check_proofs.py` encontrou a rede `cadastro-feliz-net` deixada por `make laravel-composer` e recusou o run infra; a rede vazia foi removida e a rodada repetida
