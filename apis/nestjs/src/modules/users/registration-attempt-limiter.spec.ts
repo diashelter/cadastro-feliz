@@ -149,7 +149,7 @@ describe('RegistrationAttemptLimiter', () => {
     expect(limited!.retryAfter).toBe(1);
   });
 
-  it('reserves twenty units and refuses the twenty-first with the seconds left', async () => {
+  it('refuses the twenty-first reservation with the seconds left', async () => {
     for (let i = 1; i <= 20; i++) {
       expect(await limitedBy(() => limiter.reserveQuota(IP))).toBeNull();
     }
@@ -193,7 +193,7 @@ describe('RegistrationAttemptLimiter', () => {
     expect(await limitedBy(() => limiter.reserveQuota(IP))).toBeInstanceOf(RegistrationLimited);
   });
 
-  it('undoes a refused reservation whose window expired without going negative', async () => {
+  it('undoes an expired refused reservation without going negative', async () => {
     redis.afterIncr = (key, value) => {
       if (key === quotaKey(IP) && value > 20) redis.entries.delete(key);
     };

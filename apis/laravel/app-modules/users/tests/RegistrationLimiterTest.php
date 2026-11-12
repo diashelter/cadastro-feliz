@@ -119,7 +119,7 @@ it('never answers a retry after below one second', function () {
     expect($limited->retryAfter)->toBe(1);
 });
 
-it('reserves twenty units and refuses the twenty-first with the seconds left', function () {
+it('refuses the twenty-first reservation with the seconds left', function () {
     for ($i = 1; $i <= 20; $i++) {
         expect(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeNull();
     }
@@ -164,7 +164,7 @@ it('ignores a release that arrives after the quota window expired', function () 
     expect(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeInstanceOf(RegistrationLimited::class);
 });
 
-it('undoes a refused reservation whose window expired without going negative', function () {
+it('undoes an expired refused reservation without going negative', function () {
     Cache::extend('expiring-quota', fn () => Cache::repository(new ExpiringQuotaStore));
     config(['cache.stores.limiter' => ['driver' => 'expiring-quota']]);
 

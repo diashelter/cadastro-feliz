@@ -49,7 +49,8 @@ rg_queue_has() { [ "$(stack_queue_length)" -ge "${1:-1}" ]; }
 rg_user_exists() { [ "$(psql_q "select count(*) from users where email = '$1'")" = 1 ]; }
 rg_quota_value() {
   local key
-  key="$(redis_q --scan --pattern 'registration:ip:*' | head -1)"
+  # A stack Laravel grava uma chave <chave>:timer ao lado do contador (decisão 28).
+  key="$(redis_q --scan --pattern 'registration:ip:*' | grep -v ':timer$' | head -1)"
   [ -n "$key" ] && redis_q GET "$key"
 }
 

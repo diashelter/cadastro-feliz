@@ -43,8 +43,8 @@ Proof: run contract-nest | PASS RG17 limiter down answers 500
 **C7** - O 21º e-mail novo do mesmo IP na janela recebe 429 com `Retry-After` entre 1 e 3600, sem ler o banco, nas duas stacks (AC 7)
 Proof: run contract-laravel | PASS RG13 ip quota
 Proof: run contract-nest | PASS RG13 ip quota
-Proof: run laravel | ✓ reserves twenty units and refuses the twenty-first with the seconds left
-Proof: run nest | ✓ registration-attempt-limiter.spec.ts reserves twenty units and refuses the twenty-first with the seconds left
+Proof: run laravel | ✓ refuses the twenty-first reservation with the seconds left
+Proof: run nest | ✓ registration-attempt-limiter.spec.ts refuses the twenty-first reservation with the seconds left
 
 **C8** - Requisições paralelas que disputam as últimas unidades da cota recebem exatamente tantos 201 quanto as unidades livres, nas duas stacks (AC 8)
 Proof: run contract-laravel | PASS RG15 ip quota holds in parallel
@@ -67,8 +67,8 @@ Proof: run laravel | ✓ ignores a release that arrives after the quota window e
 Proof: run nest | ✓ registration-attempt-limiter.spec.ts ignores a release that arrives after the quota window expired
 
 **C12** - Uma reserva recusada cuja janela expira antes de ser desfeita não deixa contador abaixo de zero nem sem expiração (AC 12)
-Proof: run laravel | ✓ undoes a refused reservation whose window expired without going negative
-Proof: run nest | ✓ registration-attempt-limiter.spec.ts undoes a refused reservation whose window expired without going negative
+Proof: run laravel | ✓ undoes an expired refused reservation without going negative
+Proof: run nest | ✓ registration-attempt-limiter.spec.ts undoes an expired refused reservation without going negative
 
 **C13** - Todo contador da cota recebe expiração de 3600 s no incremento que o cria, e reservas seguintes não a renovam: com a 1ª reserva em t e a recusa em t+100 s, o `Retry-After` é no máximo 3500 (AC 13)
 Proof: run laravel | ✓ keeps the quota window fixed from the first reservation
@@ -128,3 +128,4 @@ Proof: `test ! -e tests/infra/limiter.sh && ! grep -rqE 'stack_lua_dir|RG16|SW3|
 - **Dispatched:** none
 - **Boundary:** none yet
 - **Abandoned:** none
+- **Deviations:** os testes de C7 e C12 foram renomeados para nomes mais curtos, sem mudar a afirmação: o Pest cortava os nomes longos quando a largura do terminal era menor, e o check_proofs leu "no test ran". O ajudante `rg_quota_value` de `tests/infra` passou a ignorar a chave `<chave>:timer` que o `RateLimiter` grava, porque o RG14 e o RG18 liam o timestamp dela como se fosse a cota (door 1)
