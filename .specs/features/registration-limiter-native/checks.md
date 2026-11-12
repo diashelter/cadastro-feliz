@@ -124,7 +124,7 @@ Proof: `test ! -e tests/infra/limiter.sh && ! grep -rqE 'stack_lua_dir|RG16|SW3|
 
 ## Handoff
 
-- **Settled mid-build:** none
+- **Settled mid-build:** provas com Redis real rodam localmente, derrubando o ambiente - user: "Derrubar o ambiente local (Recomendado)"
 - **Dispatched:** none
 - **Boundary:** none yet
 - **Abandoned:** none
