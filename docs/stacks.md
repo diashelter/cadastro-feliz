@@ -50,7 +50,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - Não usar o formato de validação nativo, que traz `(and N more errors)` em `message` e só textos em `errors`. O corpo de erro segue a [forma do contrato](api-contract.md#forma-do-corpo-de-erro).
 - Configurar duas conexões Redis: `default` para a fila e `limiter` para o `redis-limiter`, sem o prefixo automático do Laravel.
 - Confiar só no `nginx` como proxy, para o IP do cliente usado no contador ser o que o `nginx` repassa. Ver [IP do cliente](api-contract.md#ip-do-cliente).
-- Não usar o `RateLimiter` do framework no contador, porque ele grava com chave e formato próprios. O `RegistrationLimiter` executa o [script do contrato](api-contract.md#operação-no-redis).
+- Não usar o `RateLimiter` do framework no contador: o `increment` dele roda em passos separados, e o último sobrescreve um incremento concorrente. O `RegistrationLimiter` usa comandos Redis da conexão `limiter` numa transação, incrementando e comparando o valor devolvido (decisão 28).
 - Não usar as migrations padrão. Ver [database.md](database.md#migrations).
 
 Com a API no ar e em ambiente local, o painel do Horizon fica em `http://localhost:8080/horizon`.
@@ -68,7 +68,6 @@ apis/laravel/
     │   ├── src/Http/Controllers/HealthController.php
     │   └── tests/
     └── users/                # POST /users, os limites, users_outbox, o relay e o e-mail de boas-vindas
-        ├── resources/lua/    # cópias dos scripts do contrato
         ├── resources/views/  # o e-mail de boas-vindas e o resumo de falhas
         ├── routes/users-routes.php
         ├── src/Console/Commands/RelayOutboxCommand.php
@@ -149,14 +148,11 @@ apis/nestjs/
         │   ├── users.controller.ts
         │   ├── users.service.ts
         │   ├── registration-attempt-limiter.service.ts
+        │   ├── registration-attempt-limiter.spec.ts
         │   ├── registration-keys.ts
         │   ├── registration-keys.spec.ts
         │   ├── user.entity.ts
-        │   ├── dto/create-user.dto.ts
-        │   └── lua/          # cópias dos scripts de docs/api-contract.md
-        │       ├── attempts.lua
-        │       ├── reserve.lua
-        │       └── release.lua
+        │   └── dto/create-user.dto.ts
         ├── outbox/
         │   ├── outbox.module.ts          # importado pela api e pelo worker, sem fila
         │   ├── outbox.repository.ts

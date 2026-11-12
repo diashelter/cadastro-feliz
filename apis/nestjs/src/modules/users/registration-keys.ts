@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIPv4, isIPv6 } from 'node:net';
 
-// As chaves do redis-limiter, iguais nas três stacks (docs/api-contract.md › Chave e IP do cliente).
+// As chaves do redis-limiter, com a regra de hash de docs/api-contract.md › Chave e IP do cliente.
 
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 

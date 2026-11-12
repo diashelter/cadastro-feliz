@@ -185,7 +185,7 @@ return [
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
         ],
 
-        // Contador de tentativas, comum às três stacks (docs/api-contract.md). Sem o
+        // Contador de tentativas e cota por IP, no redis-limiter (decisão 28). Sem o
         // prefixo automático, e falhando rápido: 1 s para conectar e para ler, sem retentar.
         'limiter' => [
             'host' => env('LIMITER_REDIS_HOST', 'redis-limiter'),

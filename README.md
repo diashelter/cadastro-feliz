@@ -60,7 +60,7 @@ flowchart LR
 | **Go** | `api`, `worker`, `rabbitmq` | RabbitMQ | Goroutine com ticker |
 | **Compartilhados** | `frontend`, `postgres`, `redis-limiter`, `mailpit`, `migrate` | | |
 
-O contador de tentativas fica no `redis-limiter`, comum às três stacks. O `redis` de Laravel e NestJS guarda apenas a fila.
+O contador de tentativas fica no `redis-limiter`, compartilhado como serviço, com o formato de cada stack (decisão 28). O `redis` de Laravel e NestJS guarda apenas a fila.
 
 ## API
 

@@ -1,6 +1,6 @@
 # Contrato da API
 
-> **Status:** em construção. A stack Laravel implementa `POST /users` e [`GET /health`](#get-health), testados por `make test-laravel` e `make test-infra`, e a stack NestJS também, testados por `make test-nest` e `make test-infra`. Cada `201` grava o usuário e o evento na mesma transação. Go ainda não tem os endpoints. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`, e os [scripts da cota](#scripts-da-cota) são executados contra o `redis-limiter` por `make test-infra`.
+> **Status:** em construção. A stack Laravel implementa `POST /users` e [`GET /health`](#get-health), testados por `make test-laravel` e `make test-infra`, e a stack NestJS também, testados por `make test-nest` e `make test-infra`. Cada `201` grava o usuário e o evento na mesma transação. Go ainda não tem os endpoints. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`. O limitador de cada stack é testado pela suíte dela e pelos casos de `make test-infra`.
 
 As três stacks expõem exatamente o mesmo contrato em `http://localhost:8080`. O frontend não sabe qual delas está respondendo.
 
@@ -175,8 +175,8 @@ Nenhum detalhe interno é exposto. A causa vai para os logs.
 | Item | Valor |
 |---|---|
 | Identidade contada | Par IP do cliente + e-mail normalizado |
-| Armazenamento | `redis-limiter`, comum às três stacks |
-| Chave | `registration:attempts:{sha256(ip + "\|" + email)}`, sem nenhum prefixo de framework |
+| Armazenamento | `redis-limiter`; o formato gravado é de cada stack (decisão 28) |
+| Chave | `registration:attempts:{sha256(ip + "\|" + email)}` |
 | Limite | 5 tentativas (`REGISTRATION_MAX_ATTEMPTS`) |
 | Janela | Fixa, 15 minutos a partir da primeira tentativa (`REGISTRATION_ATTEMPT_WINDOW_SECONDS`) |
 | O que conta | Toda tentativa com corpo válido, inclusive a que teve sucesso |
@@ -189,7 +189,7 @@ Como a chave combina IP e e-mail, quem repete o e-mail de outra pessoa a partir 
 
 ### Chave
 
-As três stacks precisam gerar exatamente os mesmos bytes, senão o limite deixa de valer na troca de stack.
+A chave guarda só o hash, nunca o IP ou o e-mail em claro. O contador é de cada stack (decisão 28), e a troca de stack não leva o limite junto.
 
 1. Monte o texto `{ip}|{email}`, em UTF-8, com o IP na forma canônica abaixo e o e-mail já normalizado (`trim` e minúsculas).
 2. Calcule o SHA-256 desse texto e escreva em hexadecimal minúsculo.
@@ -211,25 +211,17 @@ Esse exemplo serve de teste nas três stacks.
 | IPv4 mapeado em IPv6 (`::ffff:203.0.113.10`) | Convertido para IPv4 (`203.0.113.10`) |
 | IPv6 | Forma comprimida e em minúsculas (RFC 5952), sem zona (`%eth0`) |
 
-Em ambiente local, a requisição do navegador chega ao container pelo gateway da rede Docker, então todas as pessoas da máquina aparecem com o mesmo IP. Como as três stacks estão na mesma rede `cadastro-feliz-net`, esse IP é o mesmo em todas, e o limite continua valendo na troca de stack.
+Em ambiente local, a requisição do navegador chega ao container pelo gateway da rede Docker, então todas as pessoas da máquina aparecem com o mesmo IP. Como as três stacks estão na mesma rede `cadastro-feliz-net`, esse IP é o mesmo em todas.
 
-### Operação no Redis
+### Contagem
 
-Como o contador é compartilhado, a operação também faz parte do contrato: as três stacks precisam usar a mesma chave e o mesmo script. O script roda de forma atômica no Redis, o que garante que a chave nunca fique sem expiração.
+A stack incrementa o contador e compara o valor devolvido com `REGISTRATION_MAX_ATTEMPTS`, numa única operação atômica no Redis. Verificar antes e incrementar depois deixaria N requisições paralelas passarem juntas: não use esse formato.
 
-```lua
-local attempts = redis.call('INCR', KEYS[1])
-if attempts == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return { attempts, redis.call('TTL', KEYS[1]) }
-```
+- **Janela fixa:** só o incremento que cria o contador define a expiração, de `REGISTRATION_ATTEMPT_WINDOW_SECONDS`; as tentativas seguintes não a renovam.
+- **Expiração sempre presente:** nenhum contador fica sem expiração.
+- **Decisão:** acima de `REGISTRATION_MAX_ATTEMPTS`, a API responde 429 e usa os segundos restantes da janela no header `Retry-After`, no mínimo 1. No último meio segundo da janela o resto arredonda para 0, e um `Retry-After: 0` mandaria tentar de novo antes de a janela expirar.
 
-- **Entrada:** `KEYS[1]` é a chave, e `ARGV[1]` é `REGISTRATION_ATTEMPT_WINDOW_SECONDS`.
-- **Saída:** o número da tentativa e os segundos restantes da janela.
-- **Decisão:** se o número da tentativa for maior que `REGISTRATION_MAX_ATTEMPTS`, a API responde 429 e usa os segundos restantes no header `Retry-After`.
-
-Cada stack mantém uma cópia desse script. Este documento é a referência para todas elas.
+Como cada stack executa isso no Redis é decisão dela (decisão 28).
 
 Sequência com o mesmo e-mail, a partir do mesmo IP, dentro da janela:
 
@@ -246,8 +238,8 @@ Cada IP tem uma cota de cadastros concluídos por janela. O contador por IP + e-
 | Item | Valor |
 |---|---|
 | Identidade contada | IP do cliente, na forma canônica de [IP do cliente](#ip-do-cliente) |
-| Armazenamento | `redis-limiter`, comum às três stacks |
-| Chave | `registration:ip:{sha256(ip)}`, sem nenhum prefixo de framework |
+| Armazenamento | `redis-limiter`; o formato gravado é de cada stack (decisão 28) |
+| Chave | `registration:ip:{sha256(ip)}` |
 | Cota | 20 cadastros (`REGISTRATION_MAX_PER_IP`) |
 | Janela | Fixa, 1 hora a partir da primeira reserva (`REGISTRATION_IP_WINDOW_SECONDS`, 3600) |
 | Quando reserva | Depois do contador por IP + e-mail e antes da transação. Um 429 do par não reserva |
@@ -270,43 +262,14 @@ A verificação e a reserva são uma única operação atômica, feita antes de 
 
 Esse exemplo serve de teste nas três stacks.
 
-### Scripts da cota
+### Reserva e devolução
 
-Os dois scripts fazem parte do contrato, como o do contador por IP + e-mail. Cada stack mantém uma cópia deles, e os testes da infraestrutura executam os blocos abaixo no `redis-limiter`.
+O comportamento é o contrato; como cada stack executa isso no Redis é decisão dela (decisão 28).
 
-**Reserva**
-
-```lua
-local used = tonumber(redis.call('GET', KEYS[1]) or '0')
-if used >= tonumber(ARGV[1]) then
-  return { 0, math.max(1, redis.call('TTL', KEYS[1])) }
-end
-used = redis.call('INCR', KEYS[1])
-if used == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[2])
-end
-return { 1, math.max(1, redis.call('TTL', KEYS[1])) }
-```
-
-- **Entrada:** `KEYS[1]` é a chave, `ARGV[1]` é `REGISTRATION_MAX_PER_IP`, que vale pelo menos 1, e `ARGV[2]` é `REGISTRATION_IP_WINDOW_SECONDS`.
-- **Saída:** `1` e os segundos restantes da janela quando reservou; `0` e os segundos restantes quando a cota está esgotada, sem alterar nada. Os segundos restantes valem no mínimo 1: no último meio segundo da janela o `TTL` do Redis arredonda para 0, e um `Retry-After: 0` mandaria tentar de novo antes de a janela expirar.
-- **Decisão:** com `0`, a API responde 429 e usa os segundos restantes no header `Retry-After`.
-- **Janela fixa:** só a reserva que leva o uso a 1 define a expiração; as outras reservas e as devoluções não a renovam.
-
-**Devolução**
-
-```lua
-local used = tonumber(redis.call('GET', KEYS[1]) or '0')
-if used > 0 then
-  redis.call('DECR', KEYS[1])
-end
-return 0
-```
-
-- **Entrada:** `KEYS[1]` é a chave.
-- **Efeito:** devolve uma unidade sem mudar a expiração. Se a janela expirou entre a reserva e a devolução, a chave não existe e continua não existindo; o contador nunca fica negativo.
-
-Quando as devoluções levam o uso a 0, a próxima reserva recomeça a janela, como se a chave nunca tivesse sido usada.
+- **Reserva:** a stack incrementa o contador e compara o valor devolvido com `REGISTRATION_MAX_PER_IP`. Acima da cota, desfaz o próprio incremento e responde 429, com os segundos restantes da janela no header `Retry-After`, no mínimo 1. Uma reserva recusada deixa o contador como estava.
+- **Janela fixa:** só o incremento que cria o contador define a expiração, de `REGISTRATION_IP_WINDOW_SECONDS`; as outras reservas e as devoluções não a renovam.
+- **Devolução:** devolve uma unidade sem mudar a expiração.
+- **Contador nunca negativo nem sem expiração:** se a janela expirou entre a reserva e a devolução, ou entre a reserva recusada e o desfazer, o contador não fica abaixo de zero nem sem expiração.
 
 Sequência a partir do mesmo IP, com e-mails novos, dentro da janela:
 

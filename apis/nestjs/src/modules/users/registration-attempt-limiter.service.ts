@@ -1,6 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import Redis from 'ioredis';
 import { env } from '../../config';
 import { attemptsKey, quotaKey } from './registration-keys';
@@ -14,48 +12,66 @@ export class RegistrationLimited extends Error {
   }
 }
 
-// Os scripts do contrato (docs/api-contract.md › Operação no Redis e Scripts da cota), lidos de
-// src, onde o Compose Watch os copia.
-const script = (name: string): string =>
-  readFileSync(join(process.cwd(), 'src/modules/users/lua', `${name}.lua`), 'utf8');
-
 /**
- * Roda os scripts do contrato no redis-limiter. O contador é comum às três stacks, então a
- * chave e o formato são os do contrato, não os de uma biblioteca de limites.
+ * O contador de tentativas e a cota por IP no redis-limiter, com comandos do ioredis. O formato
+ * das chaves é desta stack (decisão 28).
+ *
+ * Cada operação incrementa e compara o valor devolvido: verificar antes e incrementar depois
+ * deixaria requisições paralelas passarem juntas. O incremento e a expiração vão na mesma
+ * transação, e `EXPIRE ... NX` só define a expiração de uma chave que ainda não tem, então
+ * nenhum contador fica sem expiração e a janela é fixa. A cota recusada desfaz o próprio
+ * incremento, e um decremento que fica abaixo de zero, porque a janela expirou no meio, é
+ * desfeito também.
  */
 @Injectable()
 export class RegistrationAttemptLimiter {
-  private readonly scripts = {
-    attempts: script('attempts'),
-    reserve: script('reserve'),
-    release: script('release'),
-  };
-
   constructor(@Inject(LIMITER_REDIS) private readonly redis: Redis) {}
 
   async countAttempt(ip: string, email: string): Promise<void> {
     const { maxAttempts, attemptWindow } = env.registration();
-    const [attempts, ttl] = (await this.redis.eval(this.scripts.attempts, 1, attemptsKey(ip, email), attemptWindow)) as [
-      number,
-      number,
-    ];
+    const [attempts, ttl] = await this.change(attemptsKey(ip, email), 1, attemptWindow);
     if (attempts > maxAttempts) {
-      throw new RegistrationLimited(Math.max(1, ttl));
+      throw new RegistrationLimited(secondsLeft(ttl));
     }
   }
 
   async reserveQuota(ip: string): Promise<void> {
     const { maxPerIp, ipWindow } = env.registration();
-    const [reserved, ttl] = (await this.redis.eval(this.scripts.reserve, 1, quotaKey(ip), maxPerIp, ipWindow)) as [
-      number,
-      number,
-    ];
-    if (reserved === 0) {
-      throw new RegistrationLimited(ttl);
+    const key = quotaKey(ip);
+    const [used, ttl] = await this.change(key, 1, ipWindow);
+    if (used > maxPerIp) {
+      await this.decrement(key, ipWindow);
+      throw new RegistrationLimited(secondsLeft(ttl));
     }
   }
 
   async releaseQuota(ip: string): Promise<void> {
-    await this.redis.eval(this.scripts.release, 1, quotaKey(ip));
+    await this.decrement(quotaKey(ip), env.registration().ipWindow);
   }
+
+  private async decrement(key: string, window: number): Promise<void> {
+    const [value] = await this.change(key, -1, window);
+    if (value < 0) {
+      await this.change(key, 1, window);
+    }
+  }
+
+  /** Soma `by` à chave e garante a expiração; devolve o valor novo e os segundos restantes. */
+  private async change(key: string, by: 1 | -1, window: number): Promise<[number, number]> {
+    const transaction = this.redis.multi();
+    (by > 0 ? transaction.incr(key) : transaction.decr(key)).expire(key, window, 'NX').ttl(key);
+    const results = await transaction.exec();
+    if (!results) {
+      throw new Error('redis-limiter transaction aborted');
+    }
+    for (const [error] of results) {
+      if (error) throw error;
+    }
+    return [Number(results[0][1]), Number(results[2][1])];
+  }
+}
+
+/** No último meio segundo da janela o `TTL` arredonda para 0, e `Retry-After: 0` mandaria tentar antes da hora. */
+function secondsLeft(ttl: number): number {
+  return Math.max(1, ttl);
 }

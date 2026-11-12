@@ -158,6 +158,8 @@ t_rg10_limit_without_database() {
   docker start "$(container postgres)" >/dev/null
   rg_shared_back
   [ "$status" = 429 ] || { note "status $status: $(rg_body)"; return 1; }
+  # Só o 201 da 1ª tentativa reservou; o 429 do par não reserva cota.
+  [ "$(rg_quota_value)" = 1 ] || { note "cota depois do 429: $(rg_quota_value)"; return 1; }
 }
 check "RG10 attempt limit never reads the database" t_rg10_limit_without_database
 
@@ -182,15 +184,20 @@ t_rg12_per_ip_and_email() {
 check "RG12 limit is per ip and email" t_rg12_per_ip_and_email
 
 t_rg13_ip_quota() {
-  local i got=0 status
+  local i got=0 status retry
   rg_reset
   for i in $(seq 1 20); do
     [ "$(rg_register "user$i@example.com")" = 201 ] && got=$((got + 1))
   done
   [ "$got" = 20 ] || { note "201: $got"; return 1; }
+  docker stop "$(container postgres)" >/dev/null
   status="$(rg_register user21@example.com)"
-  [ "$status" = 429 ] || { note "21º: $status"; return 1; }
+  retry="$(rg_header Retry-After)"
+  docker start "$(container postgres)" >/dev/null
+  rg_shared_back
+  [ "$status" = 429 ] || { note "21º sem banco: $status"; return 1; }
   [ "$(rg_body)" = "$LIMITED_BODY" ] || { note "corpo: $(rg_body)"; return 1; }
+  [ -n "$retry" ] && [ "$retry" -ge 1 ] && [ "$retry" -le 3600 ] || { note "Retry-After: $retry"; return 1; }
   [ "$(rg_users)" = 20 ] || { note "users: $(rg_users)"; return 1; }
 }
 check "RG13 ip quota" t_rg13_ip_quota
@@ -218,19 +225,6 @@ t_rg15_parallel_quota() {
   [ "$(rg_events)" = 20 ] || { note "users_outbox: $(rg_events)"; return 1; }
 }
 check "RG15 ip quota holds in parallel" t_rg15_parallel_quota
-
-t_rg16_lua_scripts() {
-  local n=0 name ok=0 tmp="$WORK/lua"
-  mkdir -p "$tmp"
-  awk -v dir="$tmp" '/^```lua$/{n++; on=1; next} /^```$/{on=0; next} on{print > (dir "/" n ".lua")}' "$WORK/docs/api-contract.md"
-  for name in attempts reserve release; do
-    n=$((n + 1))
-    cmp -s "$tmp/$n.lua" "$(stack_lua_dir)/$name.lua" \
-      || { note "$name.lua difere do bloco $n do contrato"; ok=1; }
-  done
-  return $ok
-}
-check "RG16 lua scripts match the contract" t_rg16_lua_scripts
 
 t_rg17_limiter_down() {
   local out code secs body ok=0

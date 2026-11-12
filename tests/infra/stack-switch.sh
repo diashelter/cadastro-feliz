@@ -1,6 +1,6 @@
-# Troca entre as stacks Laravel e NestJS (cenários 6 e 9 de docs/architecture.md), nos dois
-# sentidos: o evento deixado por uma stack sai pela outra, e o limite atingido numa continua na
-# outra. Precisa das duas stacks, então não é um arquivo de contrato, e age nelas pelo nome dos
+# Troca entre as stacks Laravel e NestJS (cenário 6 de docs/architecture.md), nos dois sentidos:
+# o evento deixado por uma stack sai pela outra. O contador de tentativas é de cada stack
+# (decisão 28), então o limite não acompanha a troca. Precisa das duas stacks, então não é um arquivo de contrato, e age nelas pelo nome dos
 # containers, sem carregar os adaptadores, cujas funções têm o mesmo nome. Plano e checks em
 # .specs/features/nestjs-stack. Carregado por run.sh.
 
@@ -28,23 +28,6 @@ sw_exactly_one() {
   [ $((SECONDS - started)) -le 60 ] || { note "levou $((SECONDS - started)) s"; return 1; }
   sleep 10
   [ "$(rg_mail_count "$1")" = 1 ] || { note "mensagens: $(rg_mail_count "$1")"; return 1; }
-}
-
-# sw_limit <e-mail>: o par deste IP e do e-mail chega ao 429: 201, quatro 409 e o 429.
-sw_limit() {
-  local i status
-  [ "$(rg_register "$1")" = 201 ] || { note "primeiro cadastro: $(rg_body)"; return 1; }
-  for i in 1 2 3 4; do
-    status="$(rg_register "$1")"
-    [ "$status" = 409 ] || { note "tentativa $((i + 1)): $status"; return 1; }
-  done
-  [ "$(rg_register "$1")" = 429 ] || { note "sexta tentativa: $(rg_body)"; return 1; }
-}
-
-# sw_still_limited <e-mail>: na outra stack, o mesmo par continua com 429 e Retry-After.
-sw_still_limited() {
-  [ "$(rg_register "$1")" = 429 ] || { note "depois da troca: $(rg_body)"; return 1; }
-  [ -n "$(rg_header Retry-After)" ] || { note "sem Retry-After"; return 1; }
 }
 
 t_sw1_nest_to_laravel() {
@@ -79,21 +62,3 @@ t_sw2_laravel_to_nest() {
   return $ok
 }
 check "SW2 laravel published event leaves through nest" t_sw2_laravel_to_nest
-
-t_sw3_limit_nest_to_laravel() {
-  mkq up-nest || { note "make up-nest saiu com erro"; return 1; }
-  sw_reset
-  sw_limit cris@example.com || return 1
-  mkq up-laravel || { note "make up-laravel saiu com erro"; return 1; }
-  sw_still_limited cris@example.com
-}
-check "SW3 attempt limit follows nest to laravel" t_sw3_limit_nest_to_laravel
-
-t_sw4_limit_laravel_to_nest() {
-  mkq up-laravel || { note "make up-laravel saiu com erro"; return 1; }
-  sw_reset
-  sw_limit duda@example.com || return 1
-  mkq up-nest || { note "make up-nest saiu com erro"; return 1; }
-  sw_still_limited duda@example.com
-}
-check "SW4 attempt limit follows laravel to nest" t_sw4_limit_laravel_to_nest
