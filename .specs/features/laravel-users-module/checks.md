@@ -84,7 +84,7 @@ Proof: `test "$(git diff --name-only 75bc72a HEAD -- tests/infra | tr '\n' ' ')"
 Proof: run infra | PASS OB11 laravel has no notifications module
 
 **C20** - Em `tests/infra`, as únicas funções que mudaram desde `75bc72a` são `stack_dispatch`, a de OB11, a de RG27, a de LV40, as de LV49 a LV51 e a de LV53 (AC 16) - acrescentada pelo achado 2 do Verifier
-Proof: `test -z "$(git diff -U0 75bc72a HEAD -- tests/infra | sed -nE 's/^@@ [^@]* @@ ([a-z_0-9]+)\(\) \{$/\1/p; s/^@@ [^@]* @@ (.*)$/hunk: \1/p; s/^[+-]([a-z_0-9]+)\(\) \{$/\1/p' | grep -vxE 'stack_dispatch|t_ob11_one_way|t_ob11_single_module|t_rg27_watch_updates_worker|t_lv40_stacks|t_lv49_modular_locked|t_lv50_modules_layout|t_lv51_image_modules|t_lv53_decision26|hunk: check "OB9 publisher class is gone" t_ob9_publisher_gone')"`
+Proof: `test -z "$(git diff -U0 75bc72a HEAD -- tests/infra | sed -nE 's/^@@ [^@]* @@ ([a-z_0-9]+)\(\) \{$/\1/p; s/^@@ [^@]* @@ (.*)$/hunk: \1/p; s/^@@ [^@]* @@$/hunk: no context/p; s/^[+-]([a-z_0-9]+)\(\) \{$/\1/p' | grep -vxE 'stack_dispatch|t_ob11_one_way|t_ob11_single_module|t_rg27_watch_updates_worker|t_lv40_stacks|t_lv49_modular_locked|t_lv50_modules_layout|t_lv51_image_modules|t_lv53_decision26|hunk: check "OB9 publisher class is gone" t_ob9_publisher_gone')"`
 
 ### S5 - Documentação alinhada
 
