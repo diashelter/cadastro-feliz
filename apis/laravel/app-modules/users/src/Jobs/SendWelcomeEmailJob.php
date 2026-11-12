@@ -1,10 +1,10 @@
 <?php
 
-namespace Modules\Notifications\Jobs;
+namespace Modules\Users\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Modules\Notifications\UseCases\SendWelcomeEmail;
+use Modules\Users\UseCases\SendWelcomeEmail;
 
 /**
  * Carrega só o id do evento: nome e e-mail não passam pelo Redis (decisão 10). Roda uma

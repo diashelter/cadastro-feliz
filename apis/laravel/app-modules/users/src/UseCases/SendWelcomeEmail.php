@@ -1,17 +1,16 @@
 <?php
 
-namespace Modules\Notifications\UseCases;
+namespace Modules\Users\UseCases;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Modules\Notifications\Mail\WelcomeMail;
+use Modules\Users\Mail\WelcomeMail;
 use Modules\Users\Repositories\OutboxRepository;
 use Throwable;
 
 /**
- * Envia o e-mail de boas-vindas de um evento user.registered e informa o resultado a users,
- * dono da tabela do outbox. Sem transação aberta durante o envio; só uma falha de envio conta
- * como tentativa.
+ * Envia o e-mail de boas-vindas de um evento user.registered e grava o resultado na linha do
+ * evento. Sem transação aberta durante o envio; só uma falha de envio conta como tentativa.
  */
 class SendWelcomeEmail
 {

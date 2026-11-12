@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Modules\Users\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Models\User;
@@ -37,9 +37,7 @@ function fakeUsers(): Mockery\MockInterface
 
 // Sem PostgreSQL: a transação de RegisterUser só executa o callback, e o evento não é gravado.
 beforeEach(function () {
-    $db = Mockery::mock(ConnectionInterface::class);
-    $db->shouldReceive('transaction')->andReturnUsing(fn (Closure $callback) => $callback());
-    $this->app->instance(ConnectionInterface::class, $db);
+    DB::shouldReceive('transaction')->andReturnUsing(fn (Closure $callback) => $callback());
     $this->mock(OutboxRepository::class)->shouldReceive('recordUserRegistered')->byDefault();
 });
 

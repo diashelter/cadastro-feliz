@@ -15,7 +15,6 @@
         "laravel/horizon": "v5.50.1",
         "laravel/tinker": "^3.0",
         "modules/health": "*",
-        "modules/notifications": "*",
         "modules/users": "*"
     },
     "require-dev": {

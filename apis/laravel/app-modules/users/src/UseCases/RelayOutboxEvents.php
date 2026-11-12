@@ -3,10 +3,11 @@
 namespace Modules\Users\UseCases;
 
 use Illuminate\Contracts\Bus\Dispatcher;
-use Illuminate\Database\ConnectionInterface;
-use Modules\Users\Exceptions\UnknownOutboxConsumer;
+use Illuminate\Support\Facades\DB;
+use Modules\Users\Enums\OutboxEventType;
+use Modules\Users\Jobs\SendWelcomeEmailJob;
 use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\Services\OutboxConsumers;
+use ValueError;
 
 /**
  * O relay: publica o lote pronto e só então o marca published, na mesma transação. Qualquer
@@ -17,25 +18,23 @@ use Modules\Users\Services\OutboxConsumers;
 class RelayOutboxEvents
 {
     public function __construct(
-        private ConnectionInterface $db,
         private OutboxRepository $outbox,
-        private OutboxConsumers $consumers,
         private Dispatcher $bus,
     ) {}
 
     /**
      * @return int quantos eventos foram publicados
      *
-     * @throws UnknownOutboxConsumer quando um evento do lote não tem consumidor; nada é publicado
+     * @throws ValueError quando um evento do lote tem um tipo fora de OutboxEventType; nada é publicado
      */
     public function execute(): int
     {
-        return $this->db->transaction(function () {
+        return DB::transaction(function () {
             $batch = $this->outbox->lockReadyBatch();
 
-            // Todos os jobs antes da primeira publicação: um tipo sem consumidor desfaz o lote
+            // Todos os jobs antes da primeira publicação: um tipo desconhecido desfaz o lote
             // sem ter publicado nada.
-            $jobs = array_map(fn (object $event) => $this->consumers->jobFor($event->event_type, $event->id), $batch);
+            $jobs = array_map(fn (object $event) => $this->jobFor($event->event_type, $event->id), $batch);
 
             foreach ($jobs as $job) {
                 $this->bus->dispatch($job);
@@ -47,5 +46,12 @@ class RelayOutboxEvents
 
             return count($batch);
         });
+    }
+
+    private function jobFor(string $eventType, string $eventId): object
+    {
+        return match (OutboxEventType::from($eventType)) {
+            OutboxEventType::UserRegistered => new SendWelcomeEmailJob($eventId),
+        };
     }
 }

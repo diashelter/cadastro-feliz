@@ -2,11 +2,10 @@
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Modules\Notifications\Jobs\SendWelcomeEmailJob;
-use Modules\Notifications\Mail\WelcomeMail;
-use Modules\Notifications\UseCases\SendWelcomeEmail;
+use Modules\Users\Jobs\SendWelcomeEmailJob;
+use Modules\Users\Mail\WelcomeMail;
 use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\Services\OutboxConsumers;
+use Modules\Users\UseCases\SendWelcomeEmail;
 
 const WELCOME_EVENT_ID = '0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e';
 
@@ -35,19 +34,12 @@ it('derives the message id from the event', function () {
     expect($mail->headers()->messageId)->toBe(WELCOME_EVENT_ID.'@cadastro-feliz.local');
 });
 
-it('renders the notifications views', function () {
+it('renders the users views', function () {
     $content = (new WelcomeMail('Ana', WELCOME_EVENT_ID))->content();
 
-    expect($content->html)->toBe('notifications::welcome')
-        ->and($content->text)->toBe('notifications::welcome-text')
+    expect($content->html)->toBe('users::welcome')
+        ->and($content->text)->toBe('users::welcome-text')
         ->and((new WelcomeMail('Ana', WELCOME_EVENT_ID))->render())->toContain('Olá, Ana!');
-});
-
-it('maps user registered to the welcome email job', function () {
-    $job = app(OutboxConsumers::class)->jobFor('user.registered', WELCOME_EVENT_ID);
-
-    expect($job)->toBeInstanceOf(SendWelcomeEmailJob::class)
-        ->and($job->eventId)->toBe(WELCOME_EVENT_ID);
 });
 
 it('skips terminal events', function () {

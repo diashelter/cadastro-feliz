@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Support\Facades\DB;
 use Modules\Users\Models\User;
 use Modules\Users\Repositories\OutboxRepository;
 use Modules\Users\Repositories\UserRepository;
@@ -18,19 +18,16 @@ function registeredUser(): User
     ]);
 }
 
-/** Uma conexão que registra o início e o fim da transação em $log; runs = false não executa o callback. */
-function recordingConnection(array &$log, bool $runs = true): ConnectionInterface
+/** DB::transaction registra o início e o fim em $log; runs = false não executa o callback. */
+function recordTransaction(array &$log, bool $runs = true): void
 {
-    $db = Mockery::mock(ConnectionInterface::class);
-    $db->shouldReceive('transaction')->once()->andReturnUsing(function (Closure $callback) use (&$log, $runs) {
+    DB::shouldReceive('transaction')->once()->andReturnUsing(function (Closure $callback) use (&$log, $runs) {
         $log[] = 'begin';
         $result = $runs ? $callback() : registeredUser();
         $log[] = 'commit';
 
         return $result;
     });
-
-    return $db;
 }
 
 function quietLimiter(): RegistrationLimiter
@@ -57,7 +54,8 @@ it('writes the user and the event inside one transaction', function () {
             $log[] = 'users_outbox';
         });
 
-    $user = (new RegisterUser(recordingConnection($log), quietLimiter(), $users, $outbox))
+    recordTransaction($log);
+    $user = (new RegisterUser(quietLimiter(), $users, $outbox))
         ->execute('  Ana Souza ', ' ANA@Example.com ', '10.0.0.1');
 
     expect($log)->toBe(['begin', 'users', 'users_outbox', 'commit'])
@@ -71,7 +69,8 @@ it('writes nothing when the transaction does not run', function () {
     $outbox = Mockery::mock(OutboxRepository::class);
     $outbox->shouldNotReceive('recordUserRegistered');
 
-    (new RegisterUser(recordingConnection($log, runs: false), quietLimiter(), $users, $outbox))
+    recordTransaction($log, runs: false);
+    (new RegisterUser(quietLimiter(), $users, $outbox))
         ->execute('Ana Souza', 'ana@example.com', '10.0.0.1');
 
     expect($log)->toBe(['begin', 'commit']);
@@ -80,8 +79,7 @@ it('writes nothing when the transaction does not run', function () {
 it('rethrows an event failure and releases the quota once', function () {
     $failure = new RuntimeException('outbox insert failed');
     $escaped = null;
-    $db = Mockery::mock(ConnectionInterface::class);
-    $db->shouldReceive('transaction')->once()->andReturnUsing(function (Closure $callback) use (&$escaped) {
+    DB::shouldReceive('transaction')->once()->andReturnUsing(function (Closure $callback) use (&$escaped) {
         try {
             return $callback();
         } catch (Throwable $e) {
@@ -97,7 +95,7 @@ it('rethrows an event failure and releases the quota once', function () {
     $outbox = Mockery::mock(OutboxRepository::class);
     $outbox->shouldReceive('recordUserRegistered')->once()->andThrow($failure);
 
-    expect(fn () => (new RegisterUser($db, $limiter, $users, $outbox))->execute('Ana Souza', 'ana@example.com', '10.0.0.1'))
+    expect(fn () => (new RegisterUser($limiter, $users, $outbox))->execute('Ana Souza', 'ana@example.com', '10.0.0.1'))
         ->toThrow(RuntimeException::class, 'outbox insert failed');
     expect($escaped)->toBe($failure);
 });
