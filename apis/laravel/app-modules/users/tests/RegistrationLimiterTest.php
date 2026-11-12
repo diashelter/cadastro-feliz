@@ -5,8 +5,8 @@ use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Services\RegistrationKeys;
 use Modules\Users\Services\RegistrationLimiter;
 
-// O limitador sobre um dublê em memória da conexão `limiter`, com INCRBY, EXPIRE ... NX e TTL
-// em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é provado
+// O limitador sobre um dublê em memória do cliente da conexão `limiter`, com INCRBY, EXPIRE ... NX
+// e TTL em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é provado
 // pelos casos RG de tests/infra/registration.sh.
 
 const LIMITER_IP = '203.0.113.10';
@@ -45,12 +45,21 @@ class FakeLimiterRedis implements RedisFactory
         return $entry;
     }
 
-    public function transaction(Closure $callback): array
+    public function client(): static
     {
-        $commands = [];
-        $transaction = new class($commands)
+        return $this;
+    }
+
+    /** MULTI: guarda os comandos encadeados e executa todos juntos no exec(). */
+    public function multi(): object
+    {
+        $redis = $this;
+
+        return new class($redis)
         {
-            public function __construct(public array &$commands) {}
+            private array $commands = [];
+
+            public function __construct(private FakeLimiterRedis $redis) {}
 
             public function __call($method, $arguments)
             {
@@ -58,10 +67,17 @@ class FakeLimiterRedis implements RedisFactory
 
                 return $this;
             }
-        };
-        $callback($transaction);
 
-        return array_map(fn ($command) => $this->{'run'.ucfirst($command[0])}(...$command[1]), $commands);
+            public function exec(): array
+            {
+                return array_map(fn ($command) => $this->redis->run($command[0], $command[1]), $this->commands);
+            }
+        };
+    }
+
+    public function run(string $command, array $arguments): mixed
+    {
+        return $this->{'run'.ucfirst(strtolower($command))}(...$arguments);
     }
 
     private function runIncrby(string $key, int $by): int

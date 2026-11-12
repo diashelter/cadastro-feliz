@@ -20,13 +20,8 @@ use RuntimeException;
  */
 class RegistrationLimiter
 {
-    /** @var \Illuminate\Redis\Connections\Connection */
-    private $redis;
-
-    public function __construct(RedisFactory $redis)
-    {
-        $this->redis = $redis->connection('limiter');
-    }
+    /** A conexão é aberta na primeira operação, dentro do try do controller: o phpredis conecta ao criá-la. */
+    public function __construct(private RedisFactory $redis) {}
 
     /** @throws RegistrationLimited */
     public function countAttempt(string $ip, string $email): void
@@ -76,11 +71,13 @@ class RegistrationLimiter
      */
     private function change(string $key, int $by, int $window): array
     {
-        $results = $this->redis->transaction(function ($transaction) use ($key, $by, $window) {
-            $transaction->incrby($key, $by);
-            $transaction->expire($key, $window, 'NX');
-            $transaction->ttl($key);
-        });
+        // O cliente direto, sem o transaction() do Laravel: ele reconecta e roda um DISCARD numa
+        // falha, e com o redis-limiter fora do ar cada tentativa espera o timeout de 1 s.
+        $results = $this->redis->connection('limiter')->client()->multi()
+            ->incrBy($key, $by)
+            ->expire($key, $window, 'NX')
+            ->ttl($key)
+            ->exec();
 
         // O EXPIRE com NX devolve false quando a chave já tem expiração; só o INCRBY e o TTL contam.
         if (! is_array($results) || ! is_int($results[0] ?? null) || ! is_int($results[2] ?? null)) {
