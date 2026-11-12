@@ -124,7 +124,7 @@ Proof: `test ! -e tests/infra/limiter.sh && ! grep -rqE 'stack_lua_dir|RG16|SW3|
 
 ## Handoff
 
-- **Settled mid-build:** provas com Redis real rodam localmente, derrubando o ambiente - user: "Derrubar o ambiente local (Recomendado)"
+- **Settled mid-build:** provas com Redis real rodam localmente, derrubando o ambiente - user: "Derrubar o ambiente local (Recomendado)"; o C17 é provado no CI, com o C9 de `shared.sh` corrigido para as 28 variáveis da decisão 27 - user: "Corrigir o C9 e provar no CI (Recomendado)"
 - **Dispatched:** none
 - **Boundary:** none yet
 - **Abandoned:** none
