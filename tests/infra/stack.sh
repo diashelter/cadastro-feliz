@@ -117,7 +117,8 @@ t_cs9_partition() {
   expected="$(cs_sorted LM0 LM1 LM2 LM2B LM3 OB1 OB2 OB4 OB5 OB6 OB15 OB16 OB17 OB18 OB22 OB23 OB24 OB25 \
     OB27 OB28 OB29 OB31 OB32 OB33 OB36 OB37 OB38)"
   [ "$(cs_ids outbox)" = "$expected" ] || { note "outbox: $(cs_ids outbox)"; ok=1; }
-  expected="$(cs_sorted LO0 RG22 RG24 RG27 RG28 OB9 OB11 OB13 OB14 OB19 OB20 OB21 OB26 OB39 OB40 OB41)"
+  expected="$(cs_sorted LO0 RG22 RG24 RG27 RG28 OB9 OB11 OB13 OB14 OB19 OB20 OB21 OB26 OB39 OB40 OB41 \
+    OM1 OM2 OM3 OM4 OM5 OM6 OM7 OM8 OM9 OM10 OM11 OM12 OM13 OM15 OM23)"
   [ "$(cs_ids laravel-outbox)" = "$expected" ] || { note "laravel-outbox: $(cs_ids laravel-outbox)"; ok=1; }
   return $ok
 }
