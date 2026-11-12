@@ -2,53 +2,74 @@
 
 namespace Modules\Users\Services;
 
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Cache\RateLimiter;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Modules\Users\Exceptions\RegistrationLimited;
 
 /**
- * Roda os scripts do contrato no redis-limiter. Os limites nativos do framework não
- * servem: gravam com chave e formato próprios, e o contador é comum às três stacks.
+ * O contador de tentativas e a cota por IP no redis-limiter, pelo RateLimiter do framework sobre
+ * o cache store `limiter`. O formato das chaves é desta stack (decisão 28).
+ *
+ * Cada operação incrementa e compara o valor devolvido, que é atômico no Redis: verificar antes
+ * e incrementar depois deixaria requisições paralelas passarem juntas. A cota recusada desfaz o
+ * próprio incremento, e um decremento que fica abaixo de zero, porque a janela expirou no meio,
+ * é desfeito também.
  */
 class RegistrationLimiter
 {
+    private RateLimiter $limits;
+
+    public function __construct(CacheFactory $cache)
+    {
+        $this->limits = new RateLimiter($cache->store('limiter'));
+    }
+
     /** @throws RegistrationLimited */
     public function countAttempt(string $ip, string $email): void
     {
-        [$attempts, $ttl] = $this->run(
-            'attempts',
-            RegistrationKeys::attempts($ip, $email),
-            (int) config('registration.attempt_window'),
-        );
+        $key = RegistrationKeys::attempts($ip, $email);
+        $attempts = $this->limits->increment($key, (int) config('registration.attempt_window'));
 
         if ($attempts > (int) config('registration.max_attempts')) {
-            throw new RegistrationLimited(max(1, (int) $ttl));
+            throw new RegistrationLimited($this->secondsLeft($key));
         }
     }
 
     /** @throws RegistrationLimited */
     public function reserveQuota(string $ip): void
     {
-        [$reserved, $ttl] = $this->run(
-            'reserve',
-            RegistrationKeys::quota($ip),
-            (int) config('registration.max_per_ip'),
-            (int) config('registration.ip_window'),
-        );
+        $key = RegistrationKeys::quota($ip);
+        $used = $this->limits->increment($key, $this->ipWindow());
 
-        if ((int) $reserved === 0) {
-            throw new RegistrationLimited((int) $ttl);
+        if ($used > (int) config('registration.max_per_ip')) {
+            $retryAfter = $this->secondsLeft($key);
+            $this->decrement($key);
+
+            throw new RegistrationLimited($retryAfter);
         }
     }
 
     public function releaseQuota(string $ip): void
     {
-        $this->run('release', RegistrationKeys::quota($ip));
+        $this->decrement(RegistrationKeys::quota($ip));
     }
 
-    private function run(string $script, string $key, int ...$arguments): mixed
+    /** O RateLimiter recria com expiração uma chave que expirou; abaixo de zero, a unidade volta. */
+    private function decrement(string $key): void
     {
-        $source = (string) file_get_contents(dirname(__DIR__, 2)."/resources/lua/{$script}.lua");
+        if ($this->limits->decrement($key, $this->ipWindow()) < 0) {
+            $this->limits->increment($key, $this->ipWindow());
+        }
+    }
 
-        return Redis::connection('limiter')->eval($source, 1, $key, ...$arguments);
+    /** No último segundo da janela o resto arredonda para 0, e `Retry-After: 0` mandaria tentar antes da hora. */
+    private function secondsLeft(string $key): int
+    {
+        return max(1, $this->limits->availableIn($key));
+    }
+
+    private function ipWindow(): int
+    {
+        return (int) config('registration.ip_window');
     }
 }
