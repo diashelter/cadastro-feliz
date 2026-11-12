@@ -302,18 +302,18 @@ t_c22_down() {
 check "C22 down keeps only postgres volume" t_c22_down
 
 t_c20_failed_migrate() {
-  cat > "$WORK/database/migrations/0002_probe.up.sql" <<'SQL'
+  cat > "$WORK/database/migrations/0003_probe.up.sql" <<'SQL'
 BEGIN;
 
 SELECT * FROM table_that_does_not_exist;
 
 COMMIT;
 SQL
-  echo 'SELECT 1;' > "$WORK/database/migrations/0002_probe.down.sql"
+  echo 'SELECT 1;' > "$WORK/database/migrations/0003_probe.down.sql"
   local rc
   mk up-go >/dev/null 2>&1
   rc=$?
-  rm -f "$WORK"/database/migrations/0002_probe.*
+  rm -f "$WORK"/database/migrations/0003_probe.*
   [ "$rc" -ne 0 ] || { note "make up-go saiu com 0"; return 1; }
   [ -z "$(project_containers cadastro-feliz-go)" ] || { note "containers da stack existem"; return 1; }
 }

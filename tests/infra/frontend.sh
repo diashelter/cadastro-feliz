@@ -307,7 +307,7 @@ t_fe22_broken_frontend() {
   local ok=0
   echo '{' > "$WORK/frontend/package-lock.json"
   mkq migrate || { note "make migrate saiu com erro"; ok=1; }
-  [ "$(psql_q 'select version, dirty from schema_migrations')" = '1|f' ] || { note "versão 1 ausente"; ok=1; }
+  [ "$(psql_q 'select version, dirty from schema_migrations')" = '2|f' ] || { note "versão 2 ausente"; ok=1; }
   fake_stack go apis/golang
   mkq up-go || { note "make up-go saiu com erro"; ok=1; }
   [ "$(health cadastro-feliz-go-api-1)" = healthy ] || { note "stack: $(health cadastro-feliz-go-api-1)"; ok=1; }
