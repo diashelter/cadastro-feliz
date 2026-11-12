@@ -73,6 +73,47 @@ class OutboxRepository
         );
     }
 
+    /** Só processed sai; o prazo conta de processed_at. Devolve quantos saíram. */
+    public function purgeProcessedOlderThan(int $days): int
+    {
+        return DB::delete(
+            'delete from users_outbox where status = ? and processed_at < now() - make_interval(days => ?)',
+            [OutboxStatus::Processed->value, $days],
+        );
+    }
+
+    /**
+     * Os failed ainda fora de um resumo aceito, os mais antigos primeiro. Sem trava: o envio do
+     * resumo acontece fora de qualquer transação.
+     *
+     * @return list<object{id: string, email: string, attempts: int, last_error: ?string}>
+     */
+    public function unnotifiedFailures(int $limit): array
+    {
+        return DB::select(
+            "select id, payload->>'email' as email, attempts, last_error from users_outbox
+             where status = ? and failure_notified_at is null
+             order by created_at
+             limit ?",
+            [OutboxStatus::Failed->value, $limit],
+        );
+    }
+
+    /**
+     * Marca só quem continua failed e sem marca: um evento reprocessado depois da leitura já
+     * está pending, com a marca zerada, e não pode ficar como avisado.
+     *
+     * @param  list<string>  $ids
+     */
+    public function markFailureNotified(array $ids): void
+    {
+        DB::update(
+            'update users_outbox set failure_notified_at = now()
+             where id = any(?::uuid[]) and status = ? and failure_notified_at is null',
+            ['{'.implode(',', $ids).'}', OutboxStatus::Failed->value],
+        );
+    }
+
     public function recordFailure(UserOutboxEvent $event, string $error): void
     {
         DB::update(

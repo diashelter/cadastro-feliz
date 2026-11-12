@@ -112,7 +112,8 @@ t_ob13_scheduler() {
   local ok=0 list
   [ "$(docker inspect -f '{{.Config.Image}}' "$RG_SC")" = cadastro-feliz-laravel-php-fpm ] || { note "imagem do scheduler"; ok=1; }
   [ -z "$(docker port "$RG_SC")" ] || { note "scheduler publica: $(docker port "$RG_SC")"; ok=1; }
-  list="$(docker exec "$RG_SC" php artisan schedule:list --no-ansi)"
+  # Os espaços entre os campos variam com as outras entradas da lista, que alinham as colunas.
+  list="$(docker exec "$RG_SC" php artisan schedule:list --no-ansi | tr -s ' ')"
   grep -F 'outbox:relay' <<< "$list" | grep -qF '* * * * * 1s' || { note "schedule:list: $list"; ok=1; }
   return $ok
 }
@@ -265,3 +266,314 @@ t_ob39_time_limits() {
   [ "$values" = '5 60 90 300' ] || { note "valores: $values"; return 1; }
 }
 check "OB39 time limits keep their order" t_ob39_time_limits
+
+# --- Limpeza e aviso de falhas (.specs/features/laravel-outbox-maintenance) ---
+# O scheduler fica parado durante cada caso: o resumo agendado a cada 5 min marcaria os
+# eventos semeados antes do comando que o caso roda.
+
+OM_OPS=ops@cadastro-feliz.local
+DAY=86400
+
+om_scheduler_stop() { docker stop "$RG_SC" >/dev/null; }
+om_scheduler_start() { docker start "$RG_SC" >/dev/null; rg_wait_for 90 rg_healthy "$RG_SC"; }
+om_purge() { docker exec "$RG_FPM" php artisan outbox:purge 2>&1; }
+om_notify() { docker exec "$RG_FPM" php artisan outbox:notify-failed 2>&1; }
+
+# om_seed <e-mail> <status> [segundos desde created_at]: imprime o id do evento.
+om_seed() { ob_seed "$1" "$2" "" 0 "${3:-0}"; }
+om_processed() {
+  local id
+  id="$(om_seed "$1" processed)"
+  psql_q "update users_outbox set processed_at = now() - make_interval(secs => $2) where id = '$id'" >/dev/null
+  echo "$id"
+}
+# om_failed <e-mail> [segundos desde created_at] [segundos desde failure_notified_at]
+om_failed() {
+  local id notified=null
+  id="$(om_seed "$1" failed "${2:-0}")"
+  [ -n "${3:-}" ] && notified="now() - make_interval(secs => $3)"
+  psql_q "update users_outbox set attempts = 5, last_error = 'Connection refused', failure_notified_at = $notified where id = '$id'" >/dev/null
+  echo "$id"
+}
+om_left() { psql_q "select string_agg(payload->>'email', ' ' order by payload->>'email') from users_outbox"; }
+om_ops_count() { rg_mail_count "$OM_OPS"; }
+om_ops_text() { rg_mail_field "$OM_OPS" '.Text' | tr -d '\r'; }
+om_line() { printf -- '- %s · %s · 5 tentativa(s) · Connection refused' "$1" "$2"; }
+
+t_om1_purge_boundary() {
+  local ok=0 out rc
+  rg_reset
+  om_scheduler_stop
+  om_processed d8@example.com $((8 * DAY)) >/dev/null
+  om_processed d7m1@example.com $((7 * DAY + 60)) >/dev/null
+  om_processed d6h23@example.com $((7 * DAY - 60)) >/dev/null
+  om_processed d6@example.com $((6 * DAY)) >/dev/null
+  out="$(om_purge)"; rc=$?
+  [ "$rc" = 0 ] || { note "saída do comando: $rc"; ok=1; }
+  [ "$out" = '2 event(s) purged.' ] || { note "saída: $out"; ok=1; }
+  [ "$(om_left)" = 'd6@example.com d6h23@example.com' ] || { note "restaram: $(om_left)"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM1 purge deletes processed events past retention" t_om1_purge_boundary
+
+t_om2_purge_keeps() {
+  local ok=0 out
+  rg_reset
+  om_scheduler_stop
+  om_seed pending@example.com pending $((30 * DAY)) >/dev/null
+  ob_seed published@example.com published $((30 * DAY)) 0 $((30 * DAY)) >/dev/null
+  om_failed failed@example.com $((30 * DAY)) >/dev/null
+  om_processed old@example.com $((8 * DAY)) >/dev/null
+  out="$(om_purge)"
+  [ "$out" = '1 event(s) purged.' ] || { note "saída: $out"; ok=1; }
+  [ "$(om_left)" = 'failed@example.com pending@example.com published@example.com' ] || { note "restaram: $(om_left)"; ok=1; }
+  rg_user_exists old@example.com || { note "o usuário do evento apagado sumiu"; ok=1; }
+  [ "$(psql_q 'select count(*) from users')" = 4 ] || { note "usuários: $(psql_q 'select count(*) from users')"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM2 purge keeps other statuses and users" t_om2_purge_keeps
+
+t_om3_purge_nothing() {
+  local ok=0 out rc before
+  rg_reset
+  om_scheduler_stop
+  om_processed recent@example.com "$DAY" >/dev/null
+  om_failed failed@example.com $((30 * DAY)) >/dev/null
+  before="$(psql_q 'select id, status, processed_at from users_outbox order by id')"
+  out="$(om_purge)"; rc=$?
+  [ "$rc" = 0 ] || { note "saída do comando: $rc"; ok=1; }
+  [ "$out" = '0 event(s) purged.' ] || { note "saída: $out"; ok=1; }
+  [ "$(psql_q 'select id, status, processed_at from users_outbox order by id')" = "$before" ] || { note "users_outbox mudou"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM3 purge with nothing due changes nothing" t_om3_purge_nothing
+
+t_om4_purge_db_down() {
+  local ok=0 out rc
+  rg_reset
+  om_scheduler_stop
+  om_processed old@example.com $((8 * DAY)) >/dev/null
+  docker stop "$OB_PG" >/dev/null
+  out="$(om_purge)"; rc=$?
+  docker start "$OB_PG" >/dev/null
+  rg_shared_back
+  [ "$rc" = 1 ] || { note "saída do comando: $rc"; ok=1; }
+  grep -qF 'outbox purge failed' <<< "$out" || { note "sem o log: $out"; ok=1; }
+  [ "$(om_left)" = 'old@example.com' ] || { note "restaram: $(om_left)"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM4 purge failure exits 1 and keeps rows" t_om4_purge_db_down
+
+t_om5_retention_days() {
+  local ok=0 out
+  rg_set_env OUTBOX_RETENTION_DAYS=1 || { note "make up-laravel saiu com erro"; return 1; }
+  rg_reset
+  om_scheduler_stop
+  om_processed two-days@example.com $((2 * DAY)) >/dev/null
+  om_processed half-day@example.com $((DAY / 2)) >/dev/null
+  out="$(om_purge)"
+  [ "$out" = '1 event(s) purged.' ] || { note "saída: $out"; ok=1; }
+  [ "$(om_left)" = 'half-day@example.com' ] || { note "restaram: $(om_left)"; ok=1; }
+  rg_set_env OUTBOX_RETENTION_DAYS=7 || { note "make up-laravel saiu com erro"; ok=1; }
+  rg_wait_for 90 rg_healthy "$RG_SC"
+  return $ok
+}
+check "OM5 purge follows the retention days" t_om5_retention_days
+
+t_om6_schedule() {
+  local ok=0 list tz
+  list="$(docker exec "$RG_SC" php artisan schedule:list --no-ansi 2>&1 | tr -s ' ')"
+  grep -qE '^ ?0 3 \* \* \* php artisan outbox:purge ' <<< "$list" || { note "sem outbox:purge às 03:00: $list"; ok=1; }
+  grep -qE '^ ?\*/5 \* \* \* \* php artisan outbox:notify-failed ' <<< "$list" || { note "sem outbox:notify-failed a cada 5 min: $list"; ok=1; }
+  tz="$(docker exec "$RG_SC" php artisan tinker --execute "echo config('app.timezone');")"
+  [ "$tz" = UTC ] || { note "timezone: $tz"; ok=1; }
+  return $ok
+}
+check "OM6 scheduler lists the maintenance commands" t_om6_schedule
+
+t_om7_digest() {
+  local ok=0 out rc ana bia text
+  rg_reset
+  om_scheduler_stop
+  ana="$(om_failed ana@example.com 20)"
+  bia="$(om_failed bia@example.com 10)"
+  out="$(om_notify)"; rc=$?
+  [ "$rc" = 0 ] || { note "saída do comando: $rc"; ok=1; }
+  [ "$out" = '2 failed event(s) notified.' ] || { note "saída: $out"; ok=1; }
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  [ "$(om_ops_count)" = 1 ] || { note "e-mails ao operador: $(om_ops_count)"; ok=1; }
+  [ "$(rg_mail_field "$OM_OPS" '.Subject')" = 'Cadastro Feliz: 2 evento(s) sem envio' ] || { note "assunto: $(rg_mail_field "$OM_OPS" '.Subject')"; ok=1; }
+  [ "$(rg_mail_field "$OM_OPS" '.From.Address')" = no-reply@cadastro-feliz.local ] || { note "remetente: $(rg_mail_field "$OM_OPS" '.From.Address')"; ok=1; }
+  text="$(om_ops_text)"
+  [ "$(grep -F -e "$(om_line "$ana" ana@example.com)" -e "$(om_line "$bia" bia@example.com)" <<< "$text")" \
+    = "$(printf '%s\n%s' "$(om_line "$ana" ana@example.com)" "$(om_line "$bia" bia@example.com)")" ] \
+    || { note "linhas: $text"; ok=1; }
+  grep -qxF 'Para reenviar, use o reprocessamento manual de docs/database.md, seção "Reprocessar um evento em failed".' <<< "$text" \
+    || { note "sem o fecho: $text"; ok=1; }
+  [ "$(psql_q 'select count(*) from users_outbox where failure_notified_at is not null')" = 2 ] || { note "marcados: $(psql_q 'select count(*) from users_outbox where failure_notified_at is not null')"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM7 digest lists failed events and marks them" t_om7_digest
+
+t_om8_second_run() {
+  local ok=0 out rc
+  rg_reset
+  om_scheduler_stop
+  om_failed ana@example.com >/dev/null
+  om_notify >/dev/null
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  out="$(om_notify)"; rc=$?
+  [ "$rc" = 0 ] || { note "saída do comando: $rc"; ok=1; }
+  [ "$out" = '0 failed event(s) notified.' ] || { note "saída: $out"; ok=1; }
+  sleep 2
+  [ "$(om_ops_count)" = 1 ] || { note "e-mails ao operador: $(om_ops_count)"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM8 second run sends no digest" t_om8_second_run
+
+t_om9_skips() {
+  local ok=0 out before
+  rg_reset
+  om_scheduler_stop
+  om_failed notified@example.com 0 "$DAY" >/dev/null
+  om_processed processed@example.com 60 >/dev/null
+  om_seed pending@example.com pending >/dev/null
+  ob_seed published@example.com published 10 >/dev/null
+  before="$(psql_q 'select id, coalesce(failure_notified_at::text, $$null$$) from users_outbox order by id')"
+  out="$(om_notify)"
+  [ "$out" = '0 failed event(s) notified.' ] || { note "saída: $out"; ok=1; }
+  sleep 2
+  [ "$(om_ops_count)" = 0 ] || { note "e-mails ao operador: $(om_ops_count)"; ok=1; }
+  [ "$(psql_q 'select id, coalesce(failure_notified_at::text, $$null$$) from users_outbox order by id')" = "$before" ] \
+    || { note "failure_notified_at mudou"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM9 digest skips other statuses and notified events" t_om9_skips
+
+t_om10_smtp_down() {
+  local ok=0 out rc id mailpit
+  mailpit="$(container mailpit)"
+  rg_reset
+  om_scheduler_stop
+  id="$(om_failed ana@example.com)"
+  docker stop "$mailpit" >/dev/null
+  out="$(om_notify)"; rc=$?
+  [ "$rc" = 1 ] || { note "saída do comando: $rc"; ok=1; }
+  grep -qF 'outbox failed-events notification failed' <<< "$out" || { note "sem o log: $out"; ok=1; }
+  [ "$(rg_event 'failure_notified_at is null' ana@example.com)" = t ] || { note "marcado com o SMTP fora"; ok=1; }
+  docker start "$mailpit" >/dev/null
+  rg_shared_back
+  out="$(om_notify)"
+  [ "$out" = '1 failed event(s) notified.' ] || { note "depois: $out"; ok=1; }
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  grep -qxF -e "$(om_line "$id" ana@example.com)" <<< "$(om_ops_text)" || { note "o resumo não lista o evento: $(om_ops_text)"; ok=1; }
+  [ "$(rg_event 'failure_notified_at is null' ana@example.com)" = f ] || { note "não marcado depois do envio"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM10 smtp down marks nothing and the next run sends" t_om10_smtp_down
+
+t_om11_batch() {
+  local ok=0 first second third text
+  rg_set_env OUTBOX_BATCH_SIZE=2 || { note "make up-laravel saiu com erro"; return 1; }
+  rg_reset
+  om_scheduler_stop
+  first="$(om_failed first@example.com 30)"
+  second="$(om_failed second@example.com 20)"
+  third="$(om_failed third@example.com 10)"
+  [ "$(om_notify)" = '2 failed event(s) notified.' ] || { note "1ª execução"; ok=1; }
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  text="$(om_ops_text)"
+  grep -qF "$first" <<< "$text" && grep -qF "$second" <<< "$text" && ! grep -qF "$third" <<< "$text" || { note "1º resumo: $text"; ok=1; }
+  [ "$(om_notify)" = '1 failed event(s) notified.' ] || { note "2ª execução"; ok=1; }
+  rg_wait_for 10 bash -c "[ \"\$(curl -s -G localhost:8025/api/v1/search --data-urlencode 'query=to:\"$OM_OPS\"' | jq -r .messages_count)\" = 2 ]"
+  text="$(om_ops_text)"
+  grep -qF "$third" <<< "$text" && ! grep -qF "$first" <<< "$text" || { note "2º resumo: $text"; ok=1; }
+  [ "$(om_notify)" = '0 failed event(s) notified.' ] || { note "3ª execução"; ok=1; }
+  sleep 2
+  [ "$(om_ops_count)" = 2 ] || { note "e-mails ao operador: $(om_ops_count)"; ok=1; }
+  rg_default_env
+  rg_wait_for 90 rg_healthy "$RG_SC"
+  return $ok
+}
+check "OM11 batch size limits each digest" t_om11_batch
+
+t_om12_reprocessed_mid_run() {
+  local ok=0 id out pid
+  rg_reset
+  om_scheduler_stop
+  id="$(om_failed ana@example.com)"
+  # O reprocessamento trava a linha antes da leitura e só confirma depois do envio do resumo:
+  # a leitura vê o evento ainda failed, e a marca espera o COMMIT.
+  docker exec "$OB_PG" psql -U cadastro_feliz -d cadastro_feliz -q -c "begin;
+    update users_outbox set status = 'pending', attempts = 0, available_at = now(), failure_notified_at = null
+      where id = '$id' and status = 'failed';
+    select pg_sleep(6);
+    commit;" >/dev/null &
+  pid=$!
+  sleep 1
+  out="$(om_notify)"
+  wait "$pid"
+  [ "$out" = '1 failed event(s) notified.' ] || { note "saída: $out"; ok=1; }
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  grep -qxF -e "$(om_line "$id" ana@example.com)" <<< "$(om_ops_text)" || { note "o resumo não lista o evento: $(om_ops_text)"; ok=1; }
+  [ "$(rg_event "status || ' ' || (failure_notified_at is null)" ana@example.com)" = 'pending true' ] \
+    || { note "evento: $(rg_event "status || ' ' || (failure_notified_at is null)" ana@example.com)"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM12 event reprocessed mid-run stays unmarked" t_om12_reprocessed_mid_run
+
+t_om13_documented_reprocess() {
+  local ok=0 id sql
+  rg_reset
+  om_scheduler_stop
+  id="$(om_failed ana@example.com 0 "$DAY")"
+  sql="$(awk '/^### Reprocessar um evento em `failed`/{on=1; next} on && /^```sql$/{grab=1; next} grab && /^```$/{exit} grab' "$WORK/docs/database.md")"
+  [ -n "$sql" ] || { note "SQL de reprocessamento não encontrado em docs/database.md"; return 1; }
+  psql_q "${sql//\$1/'$id'}" >/dev/null || { note "o SQL do documento falhou: $sql"; ok=1; }
+  [ "$(rg_event "status || ' ' || attempts || ' ' || (failure_notified_at is null)" ana@example.com)" = 'pending 0 true' ] \
+    || { note "reprocessado: $(rg_event "status || ' ' || attempts || ' ' || (failure_notified_at is null)" ana@example.com)"; ok=1; }
+  psql_q "update users_outbox set status = 'failed', attempts = 5 where id = '$id'" >/dev/null
+  [ "$(om_notify)" = '1 failed event(s) notified.' ] || { note "o evento não voltou ao resumo"; ok=1; }
+  rg_wait_for 10 rg_mail_arrived "$OM_OPS"
+  grep -qxF -e "$(om_line "$id" ana@example.com)" <<< "$(om_ops_text)" || { note "o resumo não lista o evento: $(om_ops_text)"; ok=1; }
+  om_scheduler_start
+  return $ok
+}
+check "OM13 documented reprocess clears the notice" t_om13_documented_reprocess
+
+t_om15_variables() {
+  local ok=0 c env
+  for c in "$RG_FPM" "$RG_SC" "$RG_HZ"; do
+    env="$(docker exec "$c" printenv)"
+    grep -qx 'OUTBOX_ALERT_EMAIL=ops@cadastro-feliz.local' <<< "$env" || { note "$c sem OUTBOX_ALERT_EMAIL"; ok=1; }
+    grep -qx 'OUTBOX_RETENTION_DAYS=7' <<< "$env" || { note "$c sem OUTBOX_RETENTION_DAYS"; ok=1; }
+  done
+  grep -qx 'OUTBOX_ALERT_EMAIL=ops@cadastro-feliz.local' "$WORK/.env.example" || { note ".env.example sem OUTBOX_ALERT_EMAIL"; ok=1; }
+  grep -qx 'OUTBOX_RETENTION_DAYS=7' "$WORK/.env.example" || { note ".env.example sem OUTBOX_RETENTION_DAYS"; ok=1; }
+  return $ok
+}
+check "OM15 containers receive the maintenance variables" t_om15_variables
+
+t_om23_compose_defaults() {
+  local ok=0 env cfg
+  env="$WORK/om23.env"
+  grep -vE '^OUTBOX_(RETENTION_DAYS|ALERT_EMAIL)=' "$WORK/.env.example" > "$env"
+  cfg="$(docker compose --env-file "$env" -f "$WORK/apis/laravel/docker-compose.yml" config --format json 2>/dev/null)" \
+    || { note "docker compose config falhou"; return 1; }
+  for s in php-fpm scheduler horizon; do
+    [ "$(jq -r --arg s "$s" '.services[$s].environment.OUTBOX_RETENTION_DAYS' <<< "$cfg")" = 7 ] || { note "$s: retenção"; ok=1; }
+    [ "$(jq -r --arg s "$s" '.services[$s].environment.OUTBOX_ALERT_EMAIL' <<< "$cfg")" = ops@cadastro-feliz.local ] || { note "$s: alerta"; ok=1; }
+  done
+  rm -f "$env"
+  return $ok
+}
+check "OM23 compose defaults the maintenance variables" t_om23_compose_defaults

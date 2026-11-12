@@ -675,3 +675,46 @@ t_nd5_decisions() {
   return $ok
 }
 check "ND5 decisions record typeorm vitest and the nest adapter" t_nd5_decisions
+
+# --- Limpeza e aviso de falhas (.specs/features/laravel-outbox-maintenance) ---
+
+t_om20_decision27() {
+  local f="$WORK/docs/decisions.md" body ok=0 term
+  grep -qF '| [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |' "$f" \
+    || { note "índice sem a decisão 27"; ok=1; }
+  body="$(section "$f" '27\. Limpeza e aviso de falhas de `users_outbox` na stack Laravel$')"
+  [ -n "$body" ] || { note "sem a seção da decisão 27"; return 1; }
+  for term in '`failure_notified_at`' '`outbox:purge`' '`outbox:notify-failed`' 'todo dia às 03:00 UTC' 'resumo' \
+    '**Motivos**' '**Alternativas descartadas**' '**Custos**' '**O aviso como um evento em `users_outbox`:**'; do
+    grep -qF "$term" <<< "$body" || { note "decisão 27 sem '$term'"; ok=1; }
+  done
+  return $ok
+}
+check "OM20 decision 27 recorded" t_om20_decision27
+
+t_om21_database_docs() {
+  local f="$WORK/docs/database.md" ok=0 er reprocess
+  er="$(awk '/^```mermaid$/{on=1; next} on && /^```$/{exit} on' "$f")"
+  grep -qE '^ +timestamptz failure_notified_at$' <<< "$er" || { note "erDiagram sem failure_notified_at"; ok=1; }
+  reprocess="$(awk '/^### Reprocessar um evento em `failed`/{on=1; next} on && /^```sql$/{grab=1; next} grab && /^```$/{exit} grab' "$f")"
+  [ "$reprocess" = "$(printf '%s\n' 'UPDATE users_outbox' \
+    "SET status = 'pending', attempts = 0, available_at = now(), failure_notified_at = NULL" \
+    "WHERE id = \$1 AND status = 'failed';")" ] || { note "reprocessamento: $reprocess"; ok=1; }
+  grep -qF '`OUTBOX_RETENTION_DAYS`' "$f" || { note "sem OUTBOX_RETENTION_DAYS"; ok=1; }
+  grep -qF 'Esta POC não faz limpeza' "$f" && { note "ainda diz que não faz limpeza"; ok=1; }
+  return $ok
+}
+check "OM21 database docs describe retention and notice" t_om21_database_docs
+
+t_om22_readme_infra() {
+  local ok=0 limits row
+  limits="$(section "$WORK/README.md" 'Limites conhecidos$')"
+  grep -qF 'resumo por e-mail' <<< "$limits" && grep -qF 'manual' <<< "$limits" && grep -qF '`failed`' <<< "$limits" \
+    || { note "Limites conhecidos sem o resumo de failed"; ok=1; }
+  row="$(grep -F '| `OUTBOX_ALERT_EMAIL` |' "$WORK/docs/infrastructure.md")"
+  grep -qF '| `ops@cadastro-feliz.local` |' <<< "$row" || { note "infrastructure.md: $row"; ok=1; }
+  row="$(grep -F '| `OUTBOX_RETENTION_DAYS` |' "$WORK/docs/infrastructure.md")"
+  grep -qF '| `7` |' <<< "$row" || { note "infrastructure.md: $row"; ok=1; }
+  return $ok
+}
+check "OM22 readme and infrastructure docs describe the notice" t_om22_readme_infra

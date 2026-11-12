@@ -117,7 +117,8 @@ t_cs9_partition() {
   expected="$(cs_sorted LM0 LM1 LM2 LM2B LM3 OB1 OB2 OB4 OB5 OB6 OB15 OB16 OB17 OB18 OB22 OB23 OB24 OB25 \
     OB27 OB28 OB29 OB31 OB32 OB33 OB36 OB37 OB38)"
   [ "$(cs_ids outbox)" = "$expected" ] || { note "outbox: $(cs_ids outbox)"; ok=1; }
-  expected="$(cs_sorted LO0 RG22 RG24 RG27 RG28 OB9 OB11 OB13 OB14 OB19 OB20 OB21 OB26 OB39 OB40 OB41)"
+  expected="$(cs_sorted LO0 RG22 RG24 RG27 RG28 OB9 OB11 OB13 OB14 OB19 OB20 OB21 OB26 OB39 OB40 OB41 \
+    OM1 OM2 OM3 OM4 OM5 OM6 OM7 OM8 OM9 OM10 OM11 OM12 OM13 OM15 OM23)"
   [ "$(cs_ids laravel-outbox)" = "$expected" ] || { note "laravel-outbox: $(cs_ids laravel-outbox)"; ok=1; }
   return $ok
 }
@@ -302,18 +303,18 @@ t_c22_down() {
 check "C22 down keeps only postgres volume" t_c22_down
 
 t_c20_failed_migrate() {
-  cat > "$WORK/database/migrations/0002_probe.up.sql" <<'SQL'
+  cat > "$WORK/database/migrations/0003_probe.up.sql" <<'SQL'
 BEGIN;
 
 SELECT * FROM table_that_does_not_exist;
 
 COMMIT;
 SQL
-  echo 'SELECT 1;' > "$WORK/database/migrations/0002_probe.down.sql"
+  echo 'SELECT 1;' > "$WORK/database/migrations/0003_probe.down.sql"
   local rc
   mk up-go >/dev/null 2>&1
   rc=$?
-  rm -f "$WORK"/database/migrations/0002_probe.*
+  rm -f "$WORK"/database/migrations/0003_probe.*
   [ "$rc" -ne 0 ] || { note "make up-go saiu com 0"; return 1; }
   [ -z "$(project_containers cadastro-feliz-go)" ] || { note "containers da stack existem"; return 1; }
 }

@@ -32,6 +32,7 @@
 | [24](#24-typeorm-sem-schema-próprio-na-stack-nestjs) | TypeORM sem schema próprio na stack NestJS | Definida |
 | [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |
 | [26](#26-módulo-único-da-stack-laravel) | Módulo único da stack Laravel | Definida |
+| [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -341,3 +342,24 @@ O cadastro da stack Laravel fica num módulo só, `users`: grava o usuário e o 
 **Custos**
 - Um segundo consumidor de `user.registered` entra como outro braço do `match`, dentro de `users`.
 - A classe do job mudou de namespace de novo: uma mensagem antiga que estiver na fila na troca falha no Horizon, e o evento é republicado depois de `OUTBOX_REPUBLISH_AFTER_SECONDS`.
+
+## 27. Limpeza e aviso de falhas de `users_outbox` na stack Laravel
+
+A stack Laravel agenda dois comandos no `scheduler`. `outbox:purge`, todo dia às 03:00 UTC, apaga os eventos `processed` concluídos há mais de `OUTBOX_RETENTION_DAYS` dias (padrão 7) e não toca em nenhum outro status nem em `users`. `outbox:notify-failed`, a cada 5 minutos, envia a `OUTBOX_ALERT_EMAIL` (padrão `ops@cadastro-feliz.local`) um único resumo com os eventos `failed` ainda não avisados e só depois de o SMTP aceitá-lo preenche `failure_notified_at`, coluna nova da migration `0002`. O reprocessamento manual de [database.md](database.md#reprocessar-um-evento-em-failed) passa a zerar a coluna. O detalhamento está no [design](../.design/laravel-outbox-maintenance.md) e no [plano](../.specs/features/laravel-outbox-maintenance/plan.md).
+
+**Motivos**
+- **`failed` era invisível:** só quem consultava o banco à mão sabia que um e-mail de boas-vindas não tinha saído.
+- **Dados pessoais acumulados:** todo evento `processed` guardava nome e e-mail para sempre.
+- **Resumo em vez de um e-mail por evento:** a causa mais comum de `failed` é o SMTP fora do ar, e uma queda longa geraria dezenas de avisos iguais.
+- **Um resumo repetido é tolerado, um aviso perdido não:** a marca só entra depois do envio aceito, a mesma entrega *at-least-once* do resto do outbox.
+
+**Alternativas descartadas**
+- **O aviso como um evento em `users_outbox`:** falharia pelo mesmo SMTP que causou o `failed` e exigiria uma regra para a falha do aviso não gerar outro aviso.
+- **Editar a `0001`:** um banco que já tem a versão 1 nunca receberia a coluna.
+- **Uma tabela própria de avisos:** uma tabela a mais para um campo.
+- **Avisar a pessoa cadastrada:** o canal seria o e-mail que acabou de falhar.
+
+**Custos**
+- A coluna é do schema comum: a NestJS e o Go a recebem sem usá-la, e com a NestJS ativa os eventos `failed` esperam o primeiro resumo depois que a Laravel voltar.
+- A limpeza percorre `users_outbox` inteira, sem índice em `processed_at`; serve à POC.
+- Agendada para as 03:00 UTC, a limpeza não roda se a stack estiver fora do ar nessa hora; a execução seguinte apaga o acumulado.

@@ -38,6 +38,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 **Como o outbox funciona aqui**
 - **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`, com a saída enviada ao log do container. Ele faz a seleção do lote e o `dispatch` do job de cada tipo de evento, escolhido por um `match` sobre `OutboxEventType`, hoje `SendWelcomeEmailJob`; um tipo desconhecido faz a rodada falhar sem publicar nada. O cache da stack é `array`, então `withoutOverlapping()` só vale dentro de um processo: quem impede duas execuções de publicar a mesma linha é o `SKIP LOCKED`.
 - **Worker:** o job é processado pelo Horizon, com `$tries = 1`, porque as retentativas ficam no banco.
+- **Limpeza e aviso:** o `scheduler` também roda `outbox:purge` todo dia às 03:00 UTC, que apaga os eventos `processed` com mais de `OUTBOX_RETENTION_DAYS` dias, e `outbox:notify-failed` a cada 5 minutos, que envia a `OUTBOX_ALERT_EMAIL` um resumo dos eventos `failed` ainda não avisados (decisão 27). Só esta stack faz os dois.
 - **Limites de tempo:** 5 s do SMTP, 60 s do `timeout` do Horizon, 90 s do `retry_after` e 300 s de `OUTBOX_REPUBLISH_AFTER_SECONDS`, nessa ordem. Assim, um SMTP travado conta como tentativa, e um envio em andamento não é republicado.
 
 **Pontos de atenção**
@@ -68,20 +69,25 @@ apis/laravel/
     │   └── tests/
     └── users/                # POST /users, os limites, users_outbox, o relay e o e-mail de boas-vindas
         ├── resources/lua/    # cópias dos scripts do contrato
-        ├── resources/views/  # o e-mail de boas-vindas
+        ├── resources/views/  # o e-mail de boas-vindas e o resumo de falhas
         ├── routes/users-routes.php
         ├── src/Console/Commands/RelayOutboxCommand.php
+        ├── src/Console/Commands/PurgeOutboxCommand.php
+        ├── src/Console/Commands/NotifyFailedOutboxEventsCommand.php
         ├── src/Enums/        # OutboxStatus e OutboxEventType
         ├── src/Http/Controllers/UserController.php
         ├── src/Http/Requests/StoreUserRequest.php
         ├── src/Jobs/SendWelcomeEmailJob.php
         ├── src/Mail/WelcomeMail.php
+        ├── src/Mail/FailedEventsDigestMail.php
         ├── src/Models/       # User e UserOutboxEvent
         ├── src/Repositories/ # UserRepository e OutboxRepository
         ├── src/Services/     # RegistrationLimiter, RegistrationKeys e RetryPolicy
         ├── src/UseCases/RegisterUser.php
         ├── src/UseCases/RelayOutboxEvents.php
         ├── src/UseCases/SendWelcomeEmail.php
+        ├── src/UseCases/PurgeProcessedOutboxEvents.php
+        ├── src/UseCases/NotifyFailedOutboxEvents.php
         └── tests/
 ```
 

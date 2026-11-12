@@ -8,4 +8,6 @@ return [
     'republish_after' => (int) env('OUTBOX_REPUBLISH_AFTER_SECONDS', 300),
     'max_attempts' => (int) env('OUTBOX_MAX_ATTEMPTS', 5),
     'backoff_base' => (int) env('OUTBOX_BACKOFF_BASE_SECONDS', 30),
+    'retention_days' => (int) env('OUTBOX_RETENTION_DAYS', 7),
+    'alert_email' => env('OUTBOX_ALERT_EMAIL', 'ops@cadastro-feliz.local'),
 ];

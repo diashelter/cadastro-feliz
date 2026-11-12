@@ -35,6 +35,9 @@ x-app-env: &app-env
   OUTBOX_REPUBLISH_AFTER_SECONDS: ${OUTBOX_REPUBLISH_AFTER_SECONDS}
   OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS}
   OUTBOX_BACKOFF_BASE_SECONDS: ${OUTBOX_BACKOFF_BASE_SECONDS}
+  # Com padrão: um .env criado antes destas variáveis não pode deixar a retenção em 0.
+  OUTBOX_RETENTION_DAYS: ${OUTBOX_RETENTION_DAYS:-7}
+  OUTBOX_ALERT_EMAIL: ${OUTBOX_ALERT_EMAIL:-ops@cadastro-feliz.local}
 
 services:
   php-fpm:
