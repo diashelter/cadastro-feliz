@@ -1,41 +1,137 @@
 <?php
 
-use Illuminate\Cache\ArrayStore;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Modules\Users\Exceptions\RegistrationLimited;
 use Modules\Users\Services\RegistrationKeys;
 use Modules\Users\Services\RegistrationLimiter;
 
-// O limitador sobre o cache store `limiter`, aqui em memória. O comportamento contra o
-// redis-limiter real é provado pelos casos RG de tests/infra/registration.sh.
+// O limitador sobre um dublê em memória da conexão `limiter`, com INCRBY, EXPIRE ... NX e TTL
+// em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é provado
+// pelos casos RG de tests/infra/registration.sh.
 
 const LIMITER_IP = '203.0.113.10';
 const LIMITER_EMAIL = 'ana@example.com';
 
-/** Um ArrayStore que apaga a chave da cota quando ela passa do limite, como uma janela expirando entre dois comandos. */
-class ExpiringQuotaStore extends ArrayStore
+/** INCRBY, EXPIRE ... NX e TTL com a semântica do Redis, executados juntos no EXEC. */
+class FakeLimiterRedis implements RedisFactory
 {
-    public function increment($key, $value = 1)
-    {
-        $result = parent::increment($key, $value);
+    /** @var array<string, array{value: int, expiresAt: ?int}> */
+    public array $entries = [];
 
-        if ($key === RegistrationKeys::quota(LIMITER_IP) && $result > 20) {
-            $this->forget($key);
-            $this->forget($key.':timer');
+    /** Chamado depois de cada INCRBY, com a chave e o valor: um teste pode expirar a chave ali. */
+    public ?Closure $afterIncr = null;
+
+    public function connection($name = null)
+    {
+        return $this;
+    }
+
+    private function now(): int
+    {
+        return (int) now()->getPreciseTimestamp(3);
+    }
+
+    /** @return array{value: int, expiresAt: ?int}|null */
+    private function live(string $key): ?array
+    {
+        $entry = $this->entries[$key] ?? null;
+
+        if ($entry !== null && $entry['expiresAt'] !== null && $entry['expiresAt'] <= $this->now()) {
+            unset($this->entries[$key]);
+
+            return null;
         }
 
-        return $result;
+        return $entry;
+    }
+
+    public function transaction(Closure $callback): array
+    {
+        $commands = [];
+        $transaction = new class($commands)
+        {
+            public function __construct(public array &$commands) {}
+
+            public function __call($method, $arguments)
+            {
+                $this->commands[] = [$method, $arguments];
+
+                return $this;
+            }
+        };
+        $callback($transaction);
+
+        return array_map(fn ($command) => $this->{'run'.ucfirst($command[0])}(...$command[1]), $commands);
+    }
+
+    private function runIncrby(string $key, int $by): int
+    {
+        $entry = $this->live($key) ?? ['value' => 0, 'expiresAt' => null];
+        $entry['value'] += $by;
+        $this->entries[$key] = $entry;
+
+        if ($this->afterIncr !== null) {
+            ($this->afterIncr)($key, $entry['value']);
+        }
+
+        return $entry['value'];
+    }
+
+    private function runExpire(string $key, int $seconds, string $mode): bool
+    {
+        $entry = $this->live($key);
+
+        if ($entry === null || ($mode === 'NX' && $entry['expiresAt'] !== null)) {
+            return false;
+        }
+
+        $this->entries[$key]['expiresAt'] = $this->now() + $seconds * 1000;
+
+        return true;
+    }
+
+    private function runTtl(string $key): int
+    {
+        $entry = $this->live($key);
+
+        if ($entry === null) {
+            return -2;
+        }
+
+        if ($entry['expiresAt'] === null) {
+            return -1;
+        }
+
+        return intdiv($entry['expiresAt'] - $this->now() + 500, 1000);
+    }
+
+    public function value(string $key): ?int
+    {
+        return $this->live($key)['value'] ?? null;
+    }
+
+    public function everyKeyExpires(): bool
+    {
+        foreach ($this->entries as $entry) {
+            if ($entry['expiresAt'] === null) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
 beforeEach(function () {
     config([
-        'cache.stores.limiter' => ['driver' => 'array', 'serialize' => false],
         'registration.max_attempts' => 5,
         'registration.attempt_window' => 900,
         'registration.max_per_ip' => 20,
         'registration.ip_window' => 3600,
     ]);
+    $this->freezeTime();
+    $this->redis = new FakeLimiterRedis;
+    $this->app->instance(RedisFactory::class, $this->redis);
 });
 
 function limiter(): RegistrationLimiter
@@ -55,26 +151,6 @@ function limitedBy(Closure $call): ?RegistrationLimited
     return null;
 }
 
-function quotaCount(): int
-{
-    return (int) Cache::store('limiter')->get(RegistrationKeys::quota(LIMITER_IP), 0);
-}
-
-/** Toda chave do store em memória tem expiração. */
-function everyKeyExpires(): bool
-{
-    $store = Cache::store('limiter')->getStore();
-    $storage = (fn () => $this->storage)->call($store);
-
-    foreach ($storage as $item) {
-        if ($item['expiresAt'] === 0 || $item['expiresAt'] === 0.0) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 function reserveTimes(int $times): void
 {
     for ($i = 0; $i < $times; $i++) {
@@ -91,7 +167,7 @@ it('refuses the sixth attempt in the window with the seconds left', function () 
     $seventh = limitedBy(fn () => limiter()->countAttempt(LIMITER_IP, LIMITER_EMAIL));
 
     expect($sixth)->toBeInstanceOf(RegistrationLimited::class)
-        ->and($sixth->retryAfter)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(900)
+        ->and($sixth->retryAfter)->toBe(900)
         ->and($seventh)->toBeInstanceOf(RegistrationLimited::class);
 });
 
@@ -105,14 +181,15 @@ it('keeps the attempt window fixed from the first attempt', function () {
 
     $sixth = limitedBy(fn () => limiter()->countAttempt(LIMITER_IP, LIMITER_EMAIL));
 
-    expect($sixth->retryAfter)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(890)
-        ->and(everyKeyExpires())->toBeTrue();
+    expect($sixth->retryAfter)->toBe(890)
+        ->and($this->redis->everyKeyExpires())->toBeTrue();
 });
 
 it('never answers a retry after below one second', function () {
-    $key = RegistrationKeys::attempts(LIMITER_IP, LIMITER_EMAIL);
-    Cache::store('limiter')->put($key, 5, 1000);
-    Cache::store('limiter')->put($key.':timer', now()->getTimestamp(), 1000);
+    $this->redis->entries[RegistrationKeys::attempts(LIMITER_IP, LIMITER_EMAIL)] = [
+        'value' => 5,
+        'expiresAt' => (int) now()->getPreciseTimestamp(3) + 400,
+    ];
 
     $limited = limitedBy(fn () => limiter()->countAttempt(LIMITER_IP, LIMITER_EMAIL));
 
@@ -127,25 +204,24 @@ it('refuses the twenty-first reservation with the seconds left', function () {
     $refused = limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP));
 
     expect($refused)->toBeInstanceOf(RegistrationLimited::class)
-        ->and($refused->retryAfter)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(3600);
+        ->and($refused->retryAfter)->toBe(3600);
 });
 
 it('leaves the quota at twenty after refused reservations', function () {
-    reserveTimes(19);
-    reserveTimes(1);
+    reserveTimes(20);
 
     for ($i = 0; $i < 4; $i++) {
         expect(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeInstanceOf(RegistrationLimited::class);
     }
 
-    expect(quotaCount())->toBe(20);
+    expect($this->redis->value(RegistrationKeys::quota(LIMITER_IP)))->toBe(20);
 });
 
 it('returns a released unit to the quota', function () {
     reserveTimes(20);
     limiter()->releaseQuota(LIMITER_IP);
 
-    expect(quotaCount())->toBe(19)
+    expect($this->redis->value(RegistrationKeys::quota(LIMITER_IP)))->toBe(19)
         ->and(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeNull()
         ->and(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeInstanceOf(RegistrationLimited::class);
 });
@@ -156,8 +232,8 @@ it('ignores a release that arrives after the quota window expired', function () 
 
     limiter()->releaseQuota(LIMITER_IP);
 
-    expect(quotaCount())->toBe(0)
-        ->and(everyKeyExpires())->toBeTrue();
+    expect($this->redis->value(RegistrationKeys::quota(LIMITER_IP)) ?? 0)->toBe(0)
+        ->and($this->redis->everyKeyExpires())->toBeTrue();
 
     reserveTimes(20);
 
@@ -165,23 +241,26 @@ it('ignores a release that arrives after the quota window expired', function () 
 });
 
 it('undoes an expired refused reservation without going negative', function () {
-    Cache::extend('expiring-quota', fn () => Cache::repository(new ExpiringQuotaStore));
-    config(['cache.stores.limiter' => ['driver' => 'expiring-quota']]);
-
+    $this->redis->afterIncr = function (string $key, int $value) {
+        if ($key === RegistrationKeys::quota(LIMITER_IP) && $value > 20) {
+            unset($this->redis->entries[$key]);
+        }
+    };
     reserveTimes(20);
 
     expect(limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP)))->toBeInstanceOf(RegistrationLimited::class)
-        ->and(quotaCount())->toBe(0)
-        ->and(everyKeyExpires())->toBeTrue();
+        ->and($this->redis->value(RegistrationKeys::quota(LIMITER_IP)) ?? 0)->toBe(0)
+        ->and($this->redis->everyKeyExpires())->toBeTrue();
 });
 
 it('keeps the quota window fixed from the first reservation', function () {
     reserveTimes(1);
+    limiter()->releaseQuota(LIMITER_IP);
     $this->travel(100)->seconds();
-    reserveTimes(19);
+    reserveTimes(20);
 
     $refused = limitedBy(fn () => limiter()->reserveQuota(LIMITER_IP));
 
-    expect($refused->retryAfter)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(3500)
-        ->and(everyKeyExpires())->toBeTrue();
+    expect($refused->retryAfter)->toBe(3500)
+        ->and($this->redis->everyKeyExpires())->toBeTrue();
 });

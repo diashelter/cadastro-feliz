@@ -124,8 +124,8 @@ Proof: `test ! -e tests/infra/limiter.sh && ! grep -rqE 'stack_lua_dir|RG16|SW3|
 
 ## Handoff
 
-- **Settled mid-build:** provas com Redis real rodam localmente, derrubando o ambiente - user: "Derrubar o ambiente local (Recomendado)"; o C17 é provado no CI, com o C9 de `shared.sh` corrigido para as 28 variáveis da decisão 27 - user: "Corrigir o C9 e provar no CI (Recomendado)"
-- **Dispatched:** Verifier at `dca88ac` (proofs.md at `0ba6c24`; C17 proven in CI on PR diashelter/cadastro-feliz#16)
+- **Settled mid-build:** provas com Redis real rodam localmente, derrubando o ambiente - user: "Derrubar o ambiente local (Recomendado)"; o C17 é provado no CI, com o C9 de `shared.sh` corrigido para as 28 variáveis da decisão 27 - user: "Corrigir o C9 e provar no CI (Recomendado)"; a stack Laravel troca o `RateLimiter` por comandos Redis em transação, depois do achado do Verifier - user: "Comandos Redis do Laravel (Recomendado)"
+- **Dispatched:** Verifier at `15383b3` (proofs.md at `0ba6c24`; C17 proven in CI on PR diashelter/cadastro-feliz#16) - returned, FAIL with 5 findings
 - **Boundary:** none yet
 - **Abandoned:** none
 - **Deviations:** os testes de C7 e C12 foram renomeados para nomes mais curtos, sem mudar a afirmação: o Pest cortava os nomes longos quando a largura do terminal era menor, e o check_proofs leu "no test ran". O ajudante `rg_quota_value` de `tests/infra` passou a ignorar a chave `<chave>:timer` que o `RateLimiter` grava, porque o RG14 e o RG18 liam o timestamp dela como se fosse a cota (door 1)

@@ -84,14 +84,6 @@ return [
             'lock_connection' => env('REDIS_CACHE_LOCK_CONNECTION', 'default'),
         ],
 
-        // O contador de tentativas e a cota por IP (decisão 28), sem prefixo de cache.
-        'limiter' => [
-            'driver' => 'redis',
-            'connection' => 'limiter',
-            'lock_connection' => 'limiter',
-            'prefix' => '',
-        ],
-
         'dynamodb' => [
             'driver' => 'dynamodb',
             'key' => env('AWS_ACCESS_KEY_ID'),

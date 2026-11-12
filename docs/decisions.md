@@ -365,20 +365,20 @@ A stack Laravel agenda dois comandos no `scheduler`. `outbox:purge`, todo dia à
 
 ## 28. Limitador de cada stack, sem Lua
 
-O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto. A stack Laravel usa o `RateLimiter` do framework sobre um cache store `limiter` no `redis-limiter`, e a stack NestJS usa comandos do ioredis em `MULTI`, com `EXPIRE ... NX`. As duas incrementam, comparam o valor devolvido com o limite e desfazem o próprio incremento quando ele passa do limite. Uma devolução que deixaria o contador abaixo de zero, porque a janela expirou no meio, também é desfeita. O `redis-limiter` continua sendo o armazenamento, mas o formato gravado é de cada stack: o contador deixa de ser comum às stacks. [api-contract.md](api-contract.md#limite-de-tentativas) descreve só o comportamento e a regra de hash das chaves. O detalhamento está no [design](../.design/tests-per-stack.md) e no [plano](../.specs/features/registration-limiter-native/plan.md).
+O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto. As duas stacks usam comandos Redis numa transação (`MULTI`), com `INCRBY` ou `INCR`, `EXPIRE ... NX` e `TTL`: a Laravel pela conexão `limiter`, a NestJS pelo ioredis. As duas incrementam, comparam o valor devolvido com o limite e desfazem o próprio incremento quando ele passa do limite. Uma devolução que deixaria o contador abaixo de zero, porque a janela expirou no meio, também é desfeita. O `redis-limiter` continua sendo o armazenamento, mas o formato gravado é de cada stack: o contador deixa de ser comum às stacks. [api-contract.md](api-contract.md#limite-de-tentativas) descreve só o comportamento e a regra de hash das chaves. O detalhamento está no [design](../.design/tests-per-stack.md) e no [plano](../.specs/features/registration-limiter-native/plan.md).
 
 **Substitui**, na decisão 5, o contador comum às stacks, com chave e script como contrato entre elas.
 
 **Motivos**
-- **Mecanismo nativo de cada stack:** os scripts eram copiados em cada stack, lidos do disco a cada requisição e mantidos iguais por um teste que comparava o texto com o contrato.
+- **Sem scripts copiados:** os scripts eram copiados em cada stack, lidos do disco a cada requisição e mantidos iguais por um teste que comparava o texto com o contrato.
 - **Paralelismo preservado:** incrementar e comparar o valor devolvido é atômico no Redis, então a cota continua exata com requisições paralelas.
 
 **Alternativas descartadas**
 - **Verificar e depois incrementar** (`RateLimiter::tooManyAttempts` seguido de `hit`, ou `attempt`): N requisições paralelas passariam juntas.
+- **`RateLimiter` do Laravel:** o `increment` dele roda `add`, `INCRBY` e `put` em passos separados; o `put` sobrescreve um `INCRBY` concorrente quando o contador nasce ou vale 0, o que aceitou 21 reservas numa cota de 20, e renova a expiração, quebrando a janela fixa.
 - **`@nestjs/throttler` na stack NestJS:** o storage padrão fica em memória, e a interface de storage não devolve unidades, então 409 e 500 consumiriam cota.
-- **Comandos Redis iguais nas três stacks, como contrato:** manteria o contador comum, mas sem o mecanismo nativo do framework que o responsável escolheu.
+- **Comandos Redis iguais nas três stacks, como contrato:** manteria o contador comum entre as stacks, o que o responsável não quis manter como contrato.
 
 **Custos**
 - Um par bloqueado numa stack não fica bloqueado garantidamente na outra.
-- A stack Laravel grava uma chave `:timer` ao lado de cada contador, e o `RedisStore` do framework ainda executa um Lua interno ao criar a chave.
 - Se o processo cair entre um decremento negativo e a correção, o contador fica em -1 até a janela expirar, o que aceita um cadastro a mais nessa janela.

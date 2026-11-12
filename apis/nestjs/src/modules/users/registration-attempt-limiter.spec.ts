@@ -124,8 +124,7 @@ describe('RegistrationAttemptLimiter', () => {
     const seventh = await limitedBy(() => limiter.countAttempt(IP, EMAIL));
 
     expect(sixth).toBeInstanceOf(RegistrationLimited);
-    expect(sixth!.retryAfter).toBeGreaterThanOrEqual(1);
-    expect(sixth!.retryAfter).toBeLessThanOrEqual(900);
+    expect(sixth!.retryAfter).toBe(900);
     expect(seventh).toBeInstanceOf(RegistrationLimited);
   });
 
@@ -136,8 +135,7 @@ describe('RegistrationAttemptLimiter', () => {
 
     const sixth = await limitedBy(() => limiter.countAttempt(IP, EMAIL));
 
-    expect(sixth!.retryAfter).toBeGreaterThanOrEqual(1);
-    expect(sixth!.retryAfter).toBeLessThanOrEqual(890);
+    expect(sixth!.retryAfter).toBe(890);
     expect(redis.everyKeyExpires()).toBe(true);
   });
 
@@ -157,8 +155,7 @@ describe('RegistrationAttemptLimiter', () => {
     const refused = await limitedBy(() => limiter.reserveQuota(IP));
 
     expect(refused).toBeInstanceOf(RegistrationLimited);
-    expect(refused!.retryAfter).toBeGreaterThanOrEqual(1);
-    expect(refused!.retryAfter).toBeLessThanOrEqual(3600);
+    expect(refused!.retryAfter).toBe(3600);
   });
 
   it('leaves the quota at twenty after refused reservations', async () => {
@@ -206,13 +203,13 @@ describe('RegistrationAttemptLimiter', () => {
 
   it('keeps the quota window fixed from the first reservation', async () => {
     await reserveTimes(1);
+    await limiter.releaseQuota(IP);
     redis.advance(100);
-    await reserveTimes(19);
+    await reserveTimes(20);
 
     const refused = await limitedBy(() => limiter.reserveQuota(IP));
 
-    expect(refused!.retryAfter).toBeGreaterThanOrEqual(1);
-    expect(refused!.retryAfter).toBeLessThanOrEqual(3500);
+    expect(refused!.retryAfter).toBe(3500);
   });
 
   it('leaves no counter without an expiry', async () => {

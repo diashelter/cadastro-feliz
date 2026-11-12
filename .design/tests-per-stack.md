@@ -56,7 +56,7 @@ A alternativa mais pesada, uma suíte de contrato caixa-preta escrita uma vez e 
 
 | Slice | Delivers | Status |
 |---|---|---|
-| [`RegistrationLimiter`](#registrationlimiter) | Limitador das duas stacks sem Lua, com as mesmas respostas de hoje | open — 1 default taken |
+| [`RegistrationLimiter`](#registrationlimiter) | Limitador das duas stacks sem Lua, com as mesmas respostas de hoje | clear |
 | [`make test-<stack>`](#make-test-stack) | Alvo que sobe os serviços, migra `cadastro_feliz_test` e roda a suíte da stack | open — 1 default taken |
 | [Suíte Laravel](#suíte-laravel) | Casos de integração no Pest, contra serviços reais | clear |
 | [Suíte NestJS](#suíte-nestjs) | Casos de integração no Vitest, contra serviços reais | clear |
@@ -69,9 +69,9 @@ Derivable from the repository, left to the plan: a forma do corpo de erro e o `R
 
 ### `RegistrationLimiter`
 
-**Delivers** o contador de tentativas e a cota por IP sem script Lua, nas classes `RegistrationLimiter` (Laravel) e `RegistrationAttemptLimiter` (NestJS). **Status: open.** É a porta da Key decision 2.
+**Delivers** o contador de tentativas e a cota por IP sem script Lua, nas classes `RegistrationLimiter` (Laravel) e `RegistrationAttemptLimiter` (NestJS). **Status: clear.** É a porta da Key decision 2.
 
-No Laravel, o limitador é o `RateLimiter` do framework sobre um cache store no `redis-limiter`, usando `increment` e `decrement`, que são atômicos nesse store. No NestJS, são comandos do ioredis no `redis-limiter`, sem dependência nova, com a mesma semântica. Os invariantes estão na Key decision 3.
+Nas duas stacks, são comandos Redis numa transação no `redis-limiter`: no Laravel pela conexão `limiter`, no NestJS pelo ioredis, sem dependência nova. O `RateLimiter` do Laravel foi descartado no build: o `increment` dele roda em passos separados e deixou passar 21 reservas numa cota de 20. Os invariantes estão na Key decision 3.
 
 | State | What should happen | Caller sees |
 |---|---|---|
@@ -113,8 +113,6 @@ sequenceDiagram
 ```
 
 Alternatives considered: `@nestjs/throttler` na stack NestJS - vence se 409 e 500 puderem consumir cota, porque a interface de storage dele não devolve unidades.
-
-1. A devolução do `RateLimiter` do Laravel depois de a janela expirar pode criar um contador sem expiração, se o `decrement` do cache no Redis for um `DECRBY` simples. Isso não foi confirmado no código do framework. Default: o plano confere no vendor e, se for o caso, só devolve quando o contador ainda existe.
 
 ### `make test-<stack>`
 

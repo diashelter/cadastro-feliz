@@ -2,36 +2,43 @@
 
 namespace Modules\Users\Services;
 
-use Illuminate\Cache\RateLimiter;
-use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Modules\Users\Exceptions\RegistrationLimited;
+use RuntimeException;
 
 /**
- * O contador de tentativas e a cota por IP no redis-limiter, pelo RateLimiter do framework sobre
- * o cache store `limiter`. O formato das chaves é desta stack (decisão 28).
+ * O contador de tentativas e a cota por IP no redis-limiter, com comandos Redis na conexão
+ * `limiter`. O formato das chaves é desta stack (decisão 28).
  *
- * Cada operação incrementa e compara o valor devolvido, que é atômico no Redis: verificar antes
- * e incrementar depois deixaria requisições paralelas passarem juntas. A cota recusada desfaz o
- * próprio incremento, e um decremento que fica abaixo de zero, porque a janela expirou no meio,
- * é desfeito também.
+ * Cada operação incrementa e compara o valor devolvido: verificar antes e incrementar depois
+ * deixaria requisições paralelas passarem juntas. O incremento e a expiração vão na mesma
+ * transação, e `EXPIRE ... NX` só define a expiração de uma chave que ainda não tem, então
+ * nenhum contador fica sem expiração e a janela é fixa. O `RateLimiter` do framework não serve:
+ * o `increment` dele roda em passos separados e o último sobrescreve um incremento concorrente.
+ * A cota recusada desfaz o próprio incremento, e um decremento que fica abaixo de zero, porque a
+ * janela expirou no meio, é desfeito também.
  */
 class RegistrationLimiter
 {
-    private RateLimiter $limits;
+    /** @var \Illuminate\Redis\Connections\Connection */
+    private $redis;
 
-    public function __construct(CacheFactory $cache)
+    public function __construct(RedisFactory $redis)
     {
-        $this->limits = new RateLimiter($cache->store('limiter'));
+        $this->redis = $redis->connection('limiter');
     }
 
     /** @throws RegistrationLimited */
     public function countAttempt(string $ip, string $email): void
     {
-        $key = RegistrationKeys::attempts($ip, $email);
-        $attempts = $this->limits->increment($key, (int) config('registration.attempt_window'));
+        [$attempts, $ttl] = $this->change(
+            RegistrationKeys::attempts($ip, $email),
+            1,
+            (int) config('registration.attempt_window'),
+        );
 
         if ($attempts > (int) config('registration.max_attempts')) {
-            throw new RegistrationLimited($this->secondsLeft($key));
+            throw new RegistrationLimited($this->secondsLeft($ttl));
         }
     }
 
@@ -39,13 +46,12 @@ class RegistrationLimiter
     public function reserveQuota(string $ip): void
     {
         $key = RegistrationKeys::quota($ip);
-        $used = $this->limits->increment($key, $this->ipWindow());
+        [$used, $ttl] = $this->change($key, 1, $this->ipWindow());
 
         if ($used > (int) config('registration.max_per_ip')) {
-            $retryAfter = $this->secondsLeft($key);
             $this->decrement($key);
 
-            throw new RegistrationLimited($retryAfter);
+            throw new RegistrationLimited($this->secondsLeft($ttl));
         }
     }
 
@@ -54,18 +60,40 @@ class RegistrationLimiter
         $this->decrement(RegistrationKeys::quota($ip));
     }
 
-    /** O RateLimiter recria com expiração uma chave que expirou; abaixo de zero, a unidade volta. */
     private function decrement(string $key): void
     {
-        if ($this->limits->decrement($key, $this->ipWindow()) < 0) {
-            $this->limits->increment($key, $this->ipWindow());
+        [$value] = $this->change($key, -1, $this->ipWindow());
+
+        if ($value < 0) {
+            $this->change($key, 1, $this->ipWindow());
         }
     }
 
-    /** No último segundo da janela o resto arredonda para 0, e `Retry-After: 0` mandaria tentar antes da hora. */
-    private function secondsLeft(string $key): int
+    /**
+     * Soma $by à chave e garante a expiração, numa só transação.
+     *
+     * @return array{int, int} o valor novo e os segundos restantes
+     */
+    private function change(string $key, int $by, int $window): array
     {
-        return max(1, $this->limits->availableIn($key));
+        $results = $this->redis->transaction(function ($transaction) use ($key, $by, $window) {
+            $transaction->incrby($key, $by);
+            $transaction->expire($key, $window, 'NX');
+            $transaction->ttl($key);
+        });
+
+        // O EXPIRE com NX devolve false quando a chave já tem expiração; só o INCRBY e o TTL contam.
+        if (! is_array($results) || ! is_int($results[0] ?? null) || ! is_int($results[2] ?? null)) {
+            throw new RuntimeException('redis-limiter transaction failed');
+        }
+
+        return [(int) $results[0], (int) $results[2]];
+    }
+
+    /** No último meio segundo da janela o `TTL` arredonda para 0, e `Retry-After: 0` mandaria tentar antes da hora. */
+    private function secondsLeft(int $ttl): int
+    {
+        return max(1, $ttl);
     }
 
     private function ipWindow(): int
