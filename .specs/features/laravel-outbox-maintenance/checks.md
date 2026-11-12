@@ -90,12 +90,13 @@ Proof: run infra | PASS OM22 readme and infrastructure docs describe the notice
 
 ### Leitores que mudam
 
-**C22** - As sondas de migration falha passam a `0003_probe`: `make migrate` com ela sai com erro e marca `3 t`, e `make up-go` com ela não sobe a stack; o frontend quebrado não impede `make migrate`, com a versão `2 f` (Changes underneath)
+**C22** - O OB13 continua achando o relay a cada segundo em `schedule:list` com as entradas novas; as sondas de migration falha passam a `0003_probe`: `make migrate` com ela sai com erro e marca `3 t`, e `make up-go` com ela não sobe a stack; o frontend quebrado não impede `make migrate`, com a versão `2 f` (Changes underneath)
 Proof: run infra | PASS C14 failed migration rolls back and marks dirty
 Proof: run infra | PASS C20 up-stack stops when migrate fails
 Proof: run infra | PASS FE22 broken frontend does not block migrate or stack
 Proof: run infra | PASS C13 migrate starts shared services
 Proof: run infra | PASS C15 migrations down drop both tables
+Proof: run infra | PASS OB13 scheduler image and schedule list
 
 **C23** - Os casos de contrato de reprocessamento e de evento inexistente continuam passando nas duas stacks com a coluna no banco (Changes underneath)
 Proof: run infra | PASS LM3 exhausted retries are recorded and recoverable
@@ -103,6 +104,10 @@ Proof: run infra | PASS OB32 missing event is ignored
 
 **C24** - `make test-laravel` sai com `0`, sem PostgreSQL nem Redis
 Proof: run laravel | Tests: passed
+
+**C25** - Com `OUTBOX_RETENTION_DAYS` `0` ou negativo, `PurgeProcessedOutboxEvents` recusa sem apagar nada, e o compose entrega `7` e `ops@cadastro-feliz.local` quando o `.env` não traz as variáveis (AC 4, acrescentada no build: um `.env` criado antes desta rodada deixaria a retenção em `0` e a limpeza apagaria todo `processed`)
+Proof: run laravel | ✓ it refuses a retention below one day
+Proof: run infra | PASS OM23 compose defaults the maintenance variables
 
 ## Coverage
 
