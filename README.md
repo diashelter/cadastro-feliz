@@ -245,7 +245,7 @@ cadastro-feliz/
 
 ## Limites conhecidos
 
-- **Reprocessamento manual:** um evento em `failed`, com as tentativas esgotadas (7,5 min de SMTP fora do ar, com os valores padrão), só volta por uma ação manual no banco, descrita em [database.md](docs/database.md#reprocessar-um-evento-em-failed). Até lá, o e-mail não sai.
+- **Reprocessamento manual:** um evento em `failed`, com as tentativas esgotadas (7,5 min de SMTP fora do ar, com os valores padrão), só volta por uma ação manual no banco, descrita em [database.md](docs/database.md#reprocessar-um-evento-em-failed). Até lá, o e-mail não sai. Na stack Laravel, o operador recebe esses eventos num resumo por e-mail, a cada 5 minutos, em `OUTBOX_ALERT_EMAIL`; a stack NestJS ainda não avisa.
 - **E-mails duplicados:** a entrega é *at-least-once*, então uma queda no momento errado pode enviar o e-mail duas vezes.
 - **Enumeração de e-mails:** o `409` revela que um e-mail já está cadastrado.
 - **Bloqueio por quem divide o IP:** o limite conta o par IP e e-mail, então só quem está atrás do mesmo IP pode bloquear o cadastro de um e-mail alheio, por até 15 minutos.

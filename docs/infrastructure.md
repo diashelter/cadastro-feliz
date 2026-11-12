@@ -211,6 +211,8 @@ Os valores abaixo são padrões para uso local, sem nenhum segredo real, inclusi
 | `OUTBOX_REPUBLISH_AFTER_SECONDS` | `300` | Tempo em `published` antes de republicar |
 | `OUTBOX_MAX_ATTEMPTS` | `5` | Falhas de envio antes de `failed` |
 | `OUTBOX_BACKOFF_BASE_SECONDS` | `30` | Base do backoff exponencial |
+| `OUTBOX_RETENTION_DAYS` | `7` | Dias depois da conclusão em que um evento `processed` é apagado; só a stack Laravel limpa |
+| `OUTBOX_ALERT_EMAIL` | `ops@cadastro-feliz.local` | Quem recebe o resumo dos eventos `failed`; só a stack Laravel avisa |
 
 ### Específicas de stack
 

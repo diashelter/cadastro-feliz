@@ -108,7 +108,7 @@ As retentativas ficam no banco, e não no recurso nativo de cada fila, para que 
 - **Antes do limite:** o evento volta para `pending`, com `available_at = now() + base * 2^(attempts - 1)`.
 - **Ao atingir `OUTBOX_MAX_ATTEMPTS`:** o evento vai para `failed` e não é mais processado.
 
-Com os valores padrão (base de 30 segundos e 5 tentativas), as esperas são de 30, 60, 120 e 240 segundos. Reprocessar um evento em `failed` é uma ação manual no banco, descrita em [database.md](database.md#reprocessar-um-evento-em-failed).
+Com os valores padrão (base de 30 segundos e 5 tentativas), as esperas são de 30, 60, 120 e 240 segundos. Reprocessar um evento em `failed` é uma ação manual no banco, descrita em [database.md](database.md#reprocessar-um-evento-em-failed). Na stack Laravel, o operador fica sabendo dos eventos `failed` por um [resumo por e-mail](database.md#resumo-de-falhas) a cada 5 minutos, e os eventos `processed` são [apagados](database.md#limpeza) depois de `OUTBOX_RETENTION_DAYS` dias (decisão 27).
 
 Republicar uma mensagem perdida não conta como tentativa, porque nenhum envio falhou.
 
