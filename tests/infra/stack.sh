@@ -22,7 +22,7 @@ cs_refused() {
 
 t_cs1_list() {
   local out expected
-  expected="$(printf '%s\n' docs shared limiter migrate stack frontend test-frontend laravel \
+  expected="$(printf '%s\n' docs shared migrate stack frontend test-frontend laravel \
     registration:laravel registration:nest outbox:laravel outbox:nest laravel-outbox nest stack-switch)"
   out="$(env DOCKER_HOST="$CS_NO_DOCKER" bash "$CS_RUN" --list 2>&1)" || { note "saiu com erro: $out"; return 1; }
   [ "$out" = "$expected" ] || { note "lista: $(tr '\n' ' ' <<< "$out")"; return 1; }
@@ -74,9 +74,9 @@ t_cs7_adapter_functions() {
   local functions=(stack_reset_queue stack_worker_stop stack_worker_start stack_relay_stop stack_relay_start
     stack_queue_stop stack_queue_start stack_queue_freeze stack_queue_unfreeze stack_queue_up_alone
     stack_queue_length stack_queued_messages stack_queue_connections stack_jobs_created stack_failed_jobs
-    stack_dispatch stack_api_errors_since stack_worker_logs_since stack_relay_container stack_lua_dir
+    stack_dispatch stack_api_errors_since stack_worker_logs_since stack_relay_container
     stack_post_from_other_ip stack_wait_ready)
-  [ "${#functions[@]}" = 22 ] || { note "lista com ${#functions[@]} funções"; return 1; }
+  [ "${#functions[@]}" = 21 ] || { note "lista com ${#functions[@]} funções"; return 1; }
   missing="$(
     # shellcheck source=/dev/null
     source "$WORK/tests/infra/adapters/laravel.sh"
@@ -111,7 +111,7 @@ cs_sorted() { printf '%s\n' "$@" | LC_ALL=C sort | tr '\n' ' '; }
 
 t_cs9_partition() {
   local ok=0 expected
-  expected="$(cs_sorted RG0 RG1 RG2 RG3 RG4 RG5 RG6 RG7 RG8 RG9 RG10 RG11 RG12 RG13 RG14 RG15 RG16 RG17 RG18 \
+  expected="$(cs_sorted RG0 RG1 RG2 RG3 RG4 RG5 RG6 RG7 RG8 RG9 RG10 RG11 RG12 RG13 RG14 RG15 RG17 RG18 \
     RG19 RG20 RG21 RG23 RG25 RG26 RG29 RG30 RG31 RG32 RG33)"
   [ "$(cs_ids registration)" = "$expected" ] || { note "registration: $(cs_ids registration)"; ok=1; }
   expected="$(cs_sorted LM0 LM1 LM2 LM2B LM3 OB1 OB2 OB4 OB5 OB6 OB15 OB16 OB17 OB18 OB22 OB23 OB24 OB25 \
@@ -162,7 +162,7 @@ check "CS13 contract cases restart what they stop" t_cs13_cases_restore
 # Troca cada arquivo de FILES por um substituto que só diz que rodou, e com qual stack.
 cs_stub_files() {
   local name
-  for name in docs shared limiter migrate stack frontend test-frontend laravel laravel-outbox nest stack-switch; do
+  for name in docs shared migrate stack frontend test-frontend laravel laravel-outbox nest stack-switch; do
     printf 'echo "ran %s"\n' "$name" > "$WORK/tests/infra/$name.sh"
   done
   for name in registration outbox; do
@@ -176,7 +176,7 @@ cs_run() { bash "$CS_RUN" "$@" 2>/dev/null | grep -E '^(ran |== )'; }
 t_cs3_all_entries() {
   local out expected
   cs_stub_files
-  expected="$(printf '%s\n' 'ran docs' 'ran shared' 'ran limiter' 'ran migrate' 'ran stack' 'ran frontend' \
+  expected="$(printf '%s\n' 'ran docs' 'ran shared' 'ran migrate' 'ran stack' 'ran frontend' \
     'ran test-frontend' 'ran laravel' '== registration:laravel' 'ran registration laravel' \
     '== registration:nest' 'ran registration nest' '== outbox:laravel' 'ran outbox laravel' \
     '== outbox:nest' 'ran outbox nest' 'ran laravel-outbox' 'ran nest' 'ran stack-switch')"

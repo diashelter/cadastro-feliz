@@ -50,7 +50,7 @@ sequenceDiagram
 | Fila | Transporta o `event_id` até o worker | Não é a fonte da verdade; pode perder mensagens sem perder eventos |
 | Worker | Carrega o evento, envia o e-mail e registra o resultado | Não decide retentativa pelo mecanismo da fila |
 | PostgreSQL | Fonte da verdade de usuários e eventos | |
-| `redis-limiter` | Guarda o contador de tentativas, comum às três stacks | Não guarda filas nem dados de negócio |
+| `redis-limiter` | Guarda o contador de tentativas, no formato de cada stack (decisão 28) | Não guarda filas nem dados de negócio |
 
 A API só se conecta ao PostgreSQL e ao `redis-limiter`. Ela nem abre conexão com a fila, e é isso que mantém o cadastro funcionando quando a fila está fora do ar.
 
@@ -148,7 +148,7 @@ A stack Laravel nasceu sem o outbox, para a perda do e-mail ser observada antes 
 
 Como o banco é único e o formato do evento é o mesmo, a stack seguinte assume eventos deixados pela anterior: linhas em `pending` são publicadas de imediato, e linhas em `published` são republicadas depois do tempo limite.
 
-O contador de tentativas também acompanha a troca, pois o `redis-limiter` é compartilhado: um par IP e e-mail bloqueado em uma stack continua bloqueado nas outras até a janela expirar. Para repetir testes do 429, use outro e-mail ou `make reset-limits`.
+O contador de tentativas não acompanha a troca de forma garantida: o `redis-limiter` é compartilhado, mas cada stack grava no próprio formato (decisão 28). Para repetir testes do 429, use outro e-mail ou `make reset-limits`.
 
 ## Cenários para validar a implementação
 
@@ -162,7 +162,7 @@ Estes cenários valem para cada stack e servem de critério de aceite quando o c
 6. **Troca de stack:** parar o worker, cadastrar, trocar de stack e ver o e-mail sair pela nova stack.
 7. **Stack derrubada:** com nenhuma stack ativa, o frontend mostra a mensagem de serviço indisponível.
 8. **Fila fora do ar:** parar a fila, cadastrar (201), ver o evento em `pending` e religar a fila para o e-mail chegar.
-9. **Limite entre stacks:** atingir o 429 em uma stack, trocar de stack e continuar recebendo 429 com o mesmo e-mail e o mesmo IP.
+9. **Limite depois da troca:** atingir o 429 em uma stack, trocar de stack e esperar a janela expirar, ou rodar `make reset-limits`, antes de repetir o cenário 2 na nova stack; o contador é de cada stack (decisão 28).
 10. **Contador fora do ar:** parar o `redis-limiter`, cadastrar e obter 500, sem gravar nada no banco.
 11. **Limite por IP e e-mail:** atingir o 429 com um e-mail a partir de um IP e cadastrar o mesmo e-mail a partir de outro IP, sem receber 429.
 12. **Cota por IP:** cadastrar 20 e-mails diferentes a partir do mesmo IP (201), receber 429 no 21º sem gravar nada, e confirmar que e-mails já cadastrados, a partir do mesmo IP, recebem 409 sem consumir cota.

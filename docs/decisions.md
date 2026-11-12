@@ -33,6 +33,7 @@
 | [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |
 | [26](#26-módulo-único-da-stack-laravel) | Módulo único da stack Laravel | Definida |
 | [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |
+| [28](#28-limitador-de-cada-stack-sem-lua) | Limitador de cada stack, sem Lua | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -68,7 +69,6 @@ O contador fica em um container compartilhado, o `redis-limiter`. Laravel e Nest
 
 **Motivos**
 - **Regra comum:** o limite de tentativas pertence ao cadastro, como o banco. A fila é um detalhe de cada stack.
-- **Limite consistente:** um par IP e e-mail bloqueado continua bloqueado ao trocar de stack.
 - **Cadastro independente da fila:** no desenho anterior, uma queda do Redis em Laravel e NestJS derrubava o cadastro junto com a fila.
 - **Configurações opostas:** a fila precisa de `noeviction`, e o BullMQ a exige. O contador é descartável e não precisa de persistência.
 
@@ -79,8 +79,8 @@ O contador fica em um container compartilhado, o `redis-limiter`. Laravel e Nest
 
 **Custos**
 - Laravel e NestJS têm dois Redis e duas conexões para configurar.
-- Chave e script passam a ser um contrato entre as stacks, definido em [api-contract.md](api-contract.md#operação-no-redis).
-- Testes do 429 precisam de outro e-mail ou de `make reset-limits`, porque o contador sobrevive à troca de stack.
+- O formato gravado no contador é de cada stack, e o limite não acompanha a troca de stack (decisão 28).
+- Testes do 429 precisam de outro e-mail ou de `make reset-limits`, porque o contador sobrevive enquanto a janela não expira.
 
 ## 6. Uma stack ativa por vez
 
@@ -180,7 +180,7 @@ O container do `frontend` roda sempre `next dev`, e o código entra na imagem po
 
 ## 17. Cota de cadastros concluídos por IP
 
-Cada IP pode concluir no máximo `REGISTRATION_MAX_PER_IP` (20) cadastros a cada `REGISTRATION_IP_WINDOW_SECONDS` (1 hora), em janela fixa no `redis-limiter`. A API reserva uma unidade da cota antes da transação, numa operação atômica, e devolve a reserva quando a resposta é 409 ou 500. Só o 201 consome a cota. A chave, os dois scripts e a posição na ordem de processamento estão em [api-contract.md](api-contract.md#limite-por-ip). O detalhamento está no [design](../.design/registration-ip-limit.md).
+Cada IP pode concluir no máximo `REGISTRATION_MAX_PER_IP` (20) cadastros a cada `REGISTRATION_IP_WINDOW_SECONDS` (1 hora), em janela fixa no `redis-limiter`. A API reserva uma unidade da cota antes da transação, numa operação atômica, e devolve a reserva quando a resposta é 409 ou 500. Só o 201 consome a cota. A chave, a regra de reserva e devolução e a posição na ordem de processamento estão em [api-contract.md](api-contract.md#limite-por-ip). O detalhamento está no [design](../.design/registration-ip-limit.md).
 
 **Motivos**
 - **O dano é o e-mail:** cada 201 grava um evento que vira um e-mail para o endereço informado. Sem a cota, um único IP poderia fazer o sistema enviar e-mails para milhares de endereços alheios.
@@ -195,7 +195,6 @@ Cada IP pode concluir no máximo `REGISTRATION_MAX_PER_IP` (20) cadastros a cada
 **Custos**
 - Pessoas atrás do mesmo IP dividem a cota.
 - Uma devolução que falha deixa a cota com uma unidade a mais até a janela expirar.
-- As três stacks mantêm cópias de mais dois scripts Lua.
 
 ## 18. Formulário sem validação no navegador
 
@@ -363,3 +362,23 @@ A stack Laravel agenda dois comandos no `scheduler`. `outbox:purge`, todo dia à
 - A coluna é do schema comum: a NestJS e o Go a recebem sem usá-la, e com a NestJS ativa os eventos `failed` esperam o primeiro resumo depois que a Laravel voltar.
 - A limpeza percorre `users_outbox` inteira, sem índice em `processed_at`; serve à POC.
 - Agendada para as 03:00 UTC, a limpeza não roda se a stack estiver fora do ar nessa hora; a execução seguinte apaga o acumulado.
+
+## 28. Limitador de cada stack, sem Lua
+
+O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto. A stack Laravel usa o `RateLimiter` do framework sobre um cache store `limiter` no `redis-limiter`, e a stack NestJS usa comandos do ioredis em `MULTI`, com `EXPIRE ... NX`. As duas incrementam, comparam o valor devolvido com o limite e desfazem o próprio incremento quando ele passa do limite. Uma devolução que deixaria o contador abaixo de zero, porque a janela expirou no meio, também é desfeita. O `redis-limiter` continua sendo o armazenamento, mas o formato gravado é de cada stack: o contador deixa de ser comum às stacks. [api-contract.md](api-contract.md#limite-de-tentativas) descreve só o comportamento e a regra de hash das chaves. O detalhamento está no [design](../.design/tests-per-stack.md) e no [plano](../.specs/features/registration-limiter-native/plan.md).
+
+**Substitui**, na decisão 5, o contador comum às stacks, com chave e script como contrato entre elas.
+
+**Motivos**
+- **Mecanismo nativo de cada stack:** os scripts eram copiados em cada stack, lidos do disco a cada requisição e mantidos iguais por um teste que comparava o texto com o contrato.
+- **Paralelismo preservado:** incrementar e comparar o valor devolvido é atômico no Redis, então a cota continua exata com requisições paralelas.
+
+**Alternativas descartadas**
+- **Verificar e depois incrementar** (`RateLimiter::tooManyAttempts` seguido de `hit`, ou `attempt`): N requisições paralelas passariam juntas.
+- **`@nestjs/throttler` na stack NestJS:** o storage padrão fica em memória, e a interface de storage não devolve unidades, então 409 e 500 consumiriam cota.
+- **Comandos Redis iguais nas três stacks, como contrato:** manteria o contador comum, mas sem o mecanismo nativo do framework que o responsável escolheu.
+
+**Custos**
+- Um par bloqueado numa stack não fica bloqueado garantidamente na outra.
+- A stack Laravel grava uma chave `:timer` ao lado de cada contador, e o `RedisStore` do framework ainda executa um Lua interno ao criar a chave.
+- Se o processo cair entre um decremento negativo e a correção, o contador fica em -1 até a janela expirar, o que aceita um cadastro a mais nessa janela.

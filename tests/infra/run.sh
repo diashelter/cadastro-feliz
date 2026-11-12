@@ -17,7 +17,7 @@ PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
 # Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
-FILES=(docs.sh shared.sh limiter.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh laravel-outbox.sh nest.sh stack-switch.sh)
+FILES=(docs.sh shared.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh laravel-outbox.sh nest.sh stack-switch.sh)
 
 # Arquivos de contrato: valem para toda stack e rodam uma vez por adaptador de
 # tests/infra/adapters, como a entrada <arquivo>:<stack> (decisão 23 de docs/decisions.md).
@@ -33,7 +33,6 @@ ADAPTER_FUNCTIONS=(
   stack_dispatch
   stack_api_errors_since stack_worker_logs_since
   stack_relay_container
-  stack_lua_dir
   stack_post_from_other_ip
   stack_wait_ready
 )

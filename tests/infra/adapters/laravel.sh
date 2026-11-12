@@ -65,7 +65,6 @@ stack_worker_logs_since() { docker logs --since "$1" "$RG_HZ" 2>&1; }
 
 stack_relay_container() { echo "$RG_SC"; }
 
-stack_lua_dir() { echo "$WORK/apis/laravel/app-modules/users/resources/lua"; }
 
 # POST /users de dentro da rede: outro IP, o do php-fpm, chega ao mesmo nginx.
 stack_post_from_other_ip() {

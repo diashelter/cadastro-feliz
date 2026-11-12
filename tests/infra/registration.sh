@@ -219,19 +219,6 @@ t_rg15_parallel_quota() {
 }
 check "RG15 ip quota holds in parallel" t_rg15_parallel_quota
 
-t_rg16_lua_scripts() {
-  local n=0 name ok=0 tmp="$WORK/lua"
-  mkdir -p "$tmp"
-  awk -v dir="$tmp" '/^```lua$/{n++; on=1; next} /^```$/{on=0; next} on{print > (dir "/" n ".lua")}' "$WORK/docs/api-contract.md"
-  for name in attempts reserve release; do
-    n=$((n + 1))
-    cmp -s "$tmp/$n.lua" "$(stack_lua_dir)/$name.lua" \
-      || { note "$name.lua difere do bloco $n do contrato"; ok=1; }
-  done
-  return $ok
-}
-check "RG16 lua scripts match the contract" t_rg16_lua_scripts
-
 t_rg17_limiter_down() {
   local out code secs body ok=0
   rg_reset

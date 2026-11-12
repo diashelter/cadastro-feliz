@@ -2,7 +2,7 @@
 
 namespace Modules\Users\Services;
 
-/** As chaves do redis-limiter, iguais nas três stacks (docs/api-contract.md). */
+/** As chaves do redis-limiter, com a regra de hash de docs/api-contract.md. */
 class RegistrationKeys
 {
     public static function attempts(string $ip, string $email): string

@@ -78,7 +78,6 @@ stack_worker_logs_since() { docker logs --since "$1" "$RG_WK" 2>&1; }
 
 stack_relay_container() { echo "$RG_WK"; }
 
-stack_lua_dir() { echo "$WORK/apis/nestjs/src/modules/users/lua"; }
 
 # POST /users de dentro da rede: outro IP, o do worker, chega à mesma api.
 stack_post_from_other_ip() {
