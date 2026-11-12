@@ -89,13 +89,19 @@ it('keeps the welcome email in users', function () {
         'Modules\\Users\\Exceptions\\UnknownOutboxConsumer',
         'Modules\\'.'Notifications\\Providers\\NotificationsServiceProvider',
     ];
-    $files = array_map('basename', array_keys(modulePhpFiles('*')));
+    $files = [];
+    foreach (['app', 'app-modules', 'config', 'bootstrap', 'routes'] as $dir) {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path($dir), FilesystemIterator::SKIP_DOTS)) as $file) {
+            $files[] = $file->getFilename();
+        }
+    }
 
     expect(class_exists(Modules\Users\Jobs\SendWelcomeEmailJob::class))->toBeTrue()
         ->and(class_exists(Modules\Users\Mail\WelcomeMail::class))->toBeTrue()
         ->and(class_exists(Modules\Users\UseCases\SendWelcomeEmail::class))->toBeTrue()
         ->and(array_filter($gone, 'class_exists'))->toBe([])
-        ->and(array_intersect(['OutboxConsumers.php', 'UnknownOutboxConsumer.php', 'NotificationsServiceProvider.php'], $files))->toBe([]);
+        ->and($files)->toContain('WelcomeMail.php')
+        ->and(array_values(array_intersect(['OutboxConsumers.php', 'UnknownOutboxConsumer.php', 'NotificationsServiceProvider.php'], $files)))->toBe([]);
 });
 
 it('injects no database connection', function () {

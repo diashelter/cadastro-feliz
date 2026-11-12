@@ -416,6 +416,8 @@ t_lv40_stacks() {
     || { note "stacks.md › Laravel sem o dono de users_outbox"; ok=1; }
   grep -E '^- \*\*Contexto:\*\*' <<< "$body" | grep -qF 'envia o e-mail de boas-vindas' \
     || { note "stacks.md › Laravel sem o envio do e-mail em users"; ok=1; }
+  grep -E '^- \*\*Contexto:\*\*' <<< "$body" | grep -qF 'roda o relay' \
+    || { note "stacks.md › Laravel sem o relay em users"; ok=1; }
   grep -E '^- \*\*Casos de uso:\*\*' <<< "$body" | grep -qF '`DB::transaction`' \
     || { note "stacks.md › Laravel sem DB::transaction nos casos de uso"; ok=1; }
   for term in 'GET /health' 'make watch-laravel' 'make laravel-composer' 'app-modules' 'Pest'; do
@@ -433,6 +435,9 @@ t_lv53_decision26() {
   for term in '**Substitui**' '**Motivos**' '**Alternativas descartadas**' '**Custos**' '`users`' '`DB::transaction`' \
     '**Manter `users` e `notifications`:**' '**`ConnectionInterface` injetada:**'; do
     grep -qF "$term" <<< "$body" || { note "decisão 26 sem '$term'"; ok=1; }
+  done
+  for term in '`users`' '`notifications`' '`ConnectionInterface`'; do
+    grep -E '^\*\*Substitui\*\*' <<< "$body" | grep -qF "$term" || { note "linha Substitui da decisão 26 sem '$term'"; ok=1; }
   done
   return $ok
 }

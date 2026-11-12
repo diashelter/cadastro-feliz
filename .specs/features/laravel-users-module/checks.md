@@ -5,7 +5,7 @@ Run laravel: `make test-laravel`
 Run infra: `bash tests/infra/run.sh docs laravel registration:laravel outbox:laravel laravel-outbox stack-switch`
 Plan: `.specs/features/laravel-users-module/plan.md`
 
-19 checks in 5 slices · 4 one-way doors · 0 open, of which 0 block
+20 checks in 5 slices · 4 one-way doors · 0 open, of which 0 block
 
 ## Checks
 
@@ -83,6 +83,9 @@ Proof: `test "$(git diff --name-only 75bc72a HEAD -- tests/infra | tr '\n' ' ')"
 **C17** - OB11 falha se `app-modules/notifications` existir ou se algum arquivo de `app-modules` referenciar `Modules\Notifications` (AC 17)
 Proof: run infra | PASS OB11 laravel has no notifications module
 
+**C20** - Em `tests/infra`, as únicas funções que mudaram desde `75bc72a` são `stack_dispatch`, a de OB11, a de RG27, a de LV40, as de LV49 a LV51 e a de LV53 (AC 16) - acrescentada pelo achado 2 do Verifier
+Proof: `test -z "$(git diff -U0 75bc72a HEAD -- tests/infra | sed -nE 's/^@@ [^@]* @@ ([a-z_0-9]+)\(\) \{$/\1/p; s/^@@ [^@]* @@ (.*)$/hunk: \1/p; s/^[+-]([a-z_0-9]+)\(\) \{$/\1/p' | grep -vxE 'stack_dispatch|t_ob11_one_way|t_ob11_single_module|t_rg27_watch_updates_worker|t_lv40_stacks|t_lv49_modular_locked|t_lv50_modules_layout|t_lv51_image_modules|t_lv53_decision26|hunk: check "OB9 publisher class is gone" t_ob9_publisher_gone')"`
+
 ### S5 - Documentação alinhada
 
 **C18** - docs/stacks.md › Laravel mostra em `users/` `src/Jobs/SendWelcomeEmailJob.php`, `src/Mail/WelcomeMail.php` e `src/UseCases/SendWelcomeEmail.php`, sem `notifications/`, `OutboxConsumers` nem `NotificationsServiceProvider`, e diz que `users` é dono de `users_outbox`, roda o relay e envia o e-mail, e que cada caso de uso abre a transação com `DB::transaction` (AC 18)
@@ -104,7 +107,7 @@ Proof: run infra | PASS LV53 decision 26 records the single laravel module
 | classes que saem, AC 3 (3) | `OutboxConsumers` C3 · `NotificationsServiceProvider` C3 · `UnknownOutboxConsumer` C3 | - |
 | casos de uso que abrem transação (2) | `RegisterUser` C6, C7 · `RelayOutboxEvents` C6, C11 | - |
 | doors de Landing (4) | 1 módulos C1, C2, C3 · 2 job na fila C4, C12 · 3 transação nos casos de uso C6, C7, C9, C11 · 4 job pelo tipo C12, C13 | - |
-| leitores de Changes underneath (9) | `stack_dispatch` C16 · `laravel-outbox.sh` RG27 e OB11 C16, C17 · `laravel.sh` LV49 a LV51 C1 · `docs.sh` LV40 C18 · `docs.sh` LV53 C19 · Pest de `users` C15 · `composer.json`/`composer.lock` C1 · docs/stacks.md C18 · docs/decisions.md C19 | - |
+| leitores de Changes underneath (9) | `stack_dispatch` C16, C20 · `laravel-outbox.sh` RG27 e OB11 C16, C17, C20 · `laravel.sh` LV49 a LV51 C1 · `docs.sh` LV40 C18 · `docs.sh` LV53 C19 · Pest de `users` C15 · `composer.json`/`composer.lock` C1 · docs/stacks.md C18 · docs/decisions.md C19 | - |
 
 ## Swept
 
