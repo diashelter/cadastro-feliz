@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "22cd41ea288eaae3b5dc707b68adbf98",
+    "content-hash": "5120549506d7e33ae2b8b4c83254af0d",
     "packages": [
         {
             "name": "brick/math",
@@ -3104,36 +3104,6 @@
                 "proprietary"
             ],
             "description": "GET /health, comum às três stacks.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
-        },
-        {
-            "name": "modules/notifications",
-            "version": "1.0",
-            "dist": {
-                "type": "path",
-                "url": "app-modules/notifications",
-                "reference": "ca4fae8ee372c1fe03e4a866561e7a7e0e6ca4c2"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "Modules\\Notifications\\Providers\\NotificationsServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "Modules\\Notifications\\": "src/"
-                }
-            },
-            "license": [
-                "proprietary"
-            ],
-            "description": "O e-mail de boas-vindas, consumidor do evento user.registered de users.",
             "transport-options": {
                 "symlink": true,
                 "relative": true

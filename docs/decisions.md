@@ -31,7 +31,7 @@
 | [23](#23-suíte-de-contrato-por-stack) | Suíte de contrato por stack | Definida |
 | [24](#24-typeorm-sem-schema-próprio-na-stack-nestjs) | TypeORM sem schema próprio na stack NestJS | Definida |
 | [25](#25-vitest-com-swc-na-stack-nestjs) | Vitest com SWC na stack NestJS | Definida |
-| [26](#26-módulos-da-stack-laravel-por-contexto) | Módulos da stack Laravel por contexto | Definida |
+| [26](#26-módulo-único-da-stack-laravel) | Módulo único da stack Laravel | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -321,22 +321,23 @@ Os testes unitários da stack NestJS usam o Vitest, o mesmo executor do frontend
 **Custos**
 - O SWC não checa tipos, então o `tsc --noEmit` roda antes, como no frontend.
 
-## 26. Módulos da stack Laravel por contexto
+## 26. Módulo único da stack Laravel
 
-Os módulos da stack Laravel seguem os contextos do domínio. `users` é o cadastro: grava o usuário e o evento, é dono de `users_outbox` e roda o relay. `notifications` envia o e-mail de boas-vindas. O módulo `outbox` deixou de existir, porque o outbox é o mecanismo de publicação do cadastro, não um contexto próprio. O detalhamento está no [plano](../.specs/features/laravel-modules-refactor/plan.md).
+O cadastro da stack Laravel fica num módulo só, `users`: grava o usuário e o evento, é dono de `users_outbox`, roda o relay e envia o e-mail de boas-vindas. Cada operação é um caso de uso em `src/UseCases` que abre a própria transação com `DB::transaction`; os repositórios só executam consultas. O detalhamento está no [plano](../.specs/features/laravel-users-module/plan.md).
 
-- **Direção:** `notifications` depende de `users`, nunca o contrário. `notifications` se registra em `OutboxConsumers` como consumidor de `user.registered`, e o relay publica o job que o consumidor registrou. Um tipo sem consumidor faz a rodada do relay falhar sem publicar nada.
-- **Dono da tabela:** só `users` escreve em `users_outbox`. `notifications` lê o evento e informa sucesso ou falha pelo `OutboxRepository` de `users`, que decide status, tentativas e espera (decisão 9).
-- **Casos de uso:** cada operação é um caso de uso em `src/UseCases`, que abre a própria transação; os repositórios não abrem transação. Status e tipos de evento ficam em enums.
+**Substitui** o desenho de 2026-11-10, com os módulos `users` e `notifications`, um registro `OutboxConsumers` para `users` não depender de `notifications`, e a conexão injetada nos casos de uso como `ConnectionInterface`.
+
+- **Job pelo tipo:** o relay escolhe o job de cada evento com um `match` sobre `OutboxEventType`. Um `event_type` fora do enum faz a rodada do relay falhar sem publicar nada.
+- **Casos de uso:** status e tipos de evento ficam em enums; os testes Pest, que rodam sem PostgreSQL, simulam a facade `DB`.
 
 **Motivos**
-- **A transação fica num módulo só:** o cadastro grava usuário e evento juntos, e com o outbox em outro módulo essa transação atravessava dois.
-- **O e-mail é uma reação ao cadastro:** um segundo consumidor de `user.registered` entra em `notifications`, ou num módulo novo, sem mudar `users`.
+- **A divisão era só de nome:** `notifications` lia e gravava `users_outbox` pelo repositório de `users`, e manter a direção da dependência exigia um registro, um provider e uma exceção para um evento com um consumidor.
+- **Uma forma de falar com o banco:** os repositórios já usam a facade `DB`; a conexão injetada existia só para os testes, que a facade simulada atende.
 
 **Alternativas descartadas**
-- **Juntar tudo em `users`:** mais simples, mas mistura o envio do e-mail ao cadastro.
-- **Manter `users` e `outbox`:** a transação do cadastro atravessa dois módulos, e o outbox não é um contexto.
+- **Manter `users` e `notifications`:** separa o e-mail do cadastro, mas o e-mail continua escrevendo pela tabela de `users`, e a separação custa três classes de indireção.
+- **`ConnectionInterface` injetada:** testável sem banco, mas é uma segunda forma de abrir transação num código que usa a facade em todo o resto.
 
 **Custos**
-- `notifications` depende do `OutboxRepository` de `users` para registrar o resultado do envio, porque o status de entrega mora na linha do evento (decisão 9).
-- A classe do job mudou de namespace: uma mensagem antiga que estiver na fila na troca falha no Horizon, e o evento é republicado depois de `OUTBOX_REPUBLISH_AFTER_SECONDS`.
+- Um segundo consumidor de `user.registered` entra como outro braço do `match`, dentro de `users`.
+- A classe do job mudou de namespace de novo: uma mensagem antiga que estiver na fila na troca falha no Horizon, e o evento é republicado depois de `OUTBOX_REPUBLISH_AFTER_SECONDS`.

@@ -2,7 +2,7 @@
 
 namespace Modules\Users\UseCases;
 
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Users\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Exceptions\RegistrationLimited;
@@ -19,7 +19,6 @@ use Throwable;
 class RegisterUser
 {
     public function __construct(
-        private ConnectionInterface $db,
         private RegistrationLimiter $limiter,
         private UserRepository $users,
         private OutboxRepository $outbox,
@@ -37,7 +36,7 @@ class RegisterUser
         $this->limiter->reserveQuota($ip);
 
         try {
-            return $this->db->transaction(function () use ($name, $email) {
+            return DB::transaction(function () use ($name, $email) {
                 $user = $this->users->create(trim($name), $email);
 
                 $this->outbox->recordUserRegistered(

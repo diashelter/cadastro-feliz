@@ -48,7 +48,7 @@ t_rg24_retries() {
 check "RG24 job has no native retries" t_rg24_retries
 
 t_rg27_watch_updates_worker() {
-  local before i started ok=0 view="$WORK/apis/laravel/app-modules/notifications/resources/views/welcome-text.blade.php" saved found=1 pid
+  local before i started ok=0 view="$WORK/apis/laravel/app-modules/users/resources/views/welcome-text.blade.php" saved found=1 pid
   saved="$(cat "$view")"
   rg_reset
   before="$(docker ps -aq --no-trunc --filter "name=^$RG_FPM\$")"
@@ -99,14 +99,14 @@ t_ob9_publisher_gone() {
 }
 check "OB9 publisher class is gone" t_ob9_publisher_gone
 
-t_ob11_one_way() {
+t_ob11_single_module() {
   [ -d "$OB_LV/app-modules/users/src" ] || { note "sem o módulo users"; return 1; }
-  [ -d "$OB_LV/app-modules/notifications/src" ] || { note "sem o módulo notifications"; return 1; }
-  if grep -rqE 'Modules\\+Notifications' "$OB_LV/app-modules/users"; then
-    note "users referencia Modules\\Notifications"; return 1
+  [ ! -e "$OB_LV/app-modules/notifications" ] || { note "o módulo notifications ainda existe"; return 1; }
+  if grep -rqE 'Modules\\+Notifications' "$OB_LV/app-modules"; then
+    note "app-modules referencia Modules\\Notifications"; return 1
   fi
 }
-check "OB11 users module does not reference notifications" t_ob11_one_way
+check "OB11 laravel has no notifications module" t_ob11_single_module
 
 t_ob13_scheduler() {
   local ok=0 list
