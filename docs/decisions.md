@@ -36,6 +36,7 @@
 | [28](#28-limitador-de-cada-stack-sem-lua) | Limitador de cada stack, sem Lua | Definida |
 | [29](#29-variáveis-de-ambiente-por-projeto-compose) | Variáveis de ambiente por projeto Compose | Definida |
 | [30](#30-só-testes-da-aplicação) | Só testes da aplicação | Definida |
+| [31](#31-env-próprio-em-cada-api) | `.env` próprio em cada API | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -389,6 +390,8 @@ O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto.
 
 ## 29. Variáveis de ambiente por projeto Compose
 
+**Substituída em parte** pela [decisão 31](#31-env-próprio-em-cada-api): nas APIs, os padrões saem do compose e voltam para um `.env.example` versionado, com `.env` próprio. Para os serviços comuns da raiz, o texto abaixo continua valendo.
+
 Cada projeto Compose (`cadastro-feliz-shared`, `cadastro-feliz-laravel`, `cadastro-feliz-nest`) declara as variáveis de que precisa, com o padrão local escrito no próprio compose: toda interpolação tem a forma `${NOME:-padrão}`, inclusive em `ports` e `command`. O `Makefile` chama o Compose sem `--env-file`, o alvo `make env` e o `.env.example` deixam de existir, e nenhum alvo cria arquivo de ambiente. Para trocar um valor, um `.env` opcional e ignorado pelo git, ao lado do compose, sobrescreve só aquele projeto: o da raiz vale para os serviços comuns, inclusive `NEXT_PUBLIC_API_URL`, e nenhuma variável de stack mora nele. O `.env` de uma stack nunca entra na imagem: `apis/laravel/.dockerignore` o exclui, como os do NestJS e do frontend já faziam. Os padrões das regras de negócio (`REGISTRATION_*` e `OUTBOX_*`) são os de [infrastructure.md](infrastructure.md#regras-de-negócio) em todas as stacks; sobrescrever localmente é livre. O detalhamento está no [design](../.design/env-per-project.md) e no [plano](../.specs/features/env-per-project/plan.md).
 
 **Substitui** o `.env.example` único na raiz (default 2 de [shared-infrastructure](../.design/shared-infrastructure.md)), o `.env` da raiz como única fonte das variáveis da Laravel (Key decision 7 de [laravel-api-base](../.design/laravel-api-base.md)) e, na Key decision 6 de [frontend-container](../.design/frontend-container.md), o `.env` da raiz como única fonte; o frontend continua sem `.env` próprio, e `NEXT_PUBLIC_API_URL` continua lido quando o container inicia.
@@ -419,3 +422,21 @@ O projeto só tem os testes da aplicação: `make test-frontend`, `make test-lar
 **Custos**
 - O que só a suíte de contrato provava fica sem teste automático: o limite e a cota contra o `redis-limiter` real, a cota com requisições paralelas, a entrega do outbox de ponta a ponta, a troca entre stacks com um evento aberto e os comandos de manutenção do outbox contra o PostgreSQL e o Mailpit reais. Esses comportamentos passam a ser conferidos à mão, pelos cenários de validação.
 - Uma stack nova deixa de ser aceita pelos mesmos casos automáticos; as suítes de cada stack cobrem só o que dá para simular.
+
+## 31. `.env` próprio em cada API
+
+Cada API tem um `.env.example` versionado e o próprio `.env`, ignorado pelo git, como num projeto Laravel ou NestJS comum. Um alvo de stack do `Makefile` cria o `.env` a partir do `.env.example` quando ele não existe. Na Laravel, o `.env` entra na imagem e o framework o lê, com o `bootstrap/app.php` na inicialização padrão. Na NestJS, o Compose entrega o `.env` à `api` e ao `worker` por `env_file`, e a aplicação continua lendo as variáveis do processo. O compose de cada stack só interpola `API_PORT`, que vem do mesmo `.env`. Os serviços comuns da raiz continuam com os padrões no compose (decisão 29).
+
+**Substitui**, na [decisão 29](#29-variáveis-de-ambiente-por-projeto-compose), os padrões das APIs escritos no compose, a ausência de `.env.example` e de passo de cópia nas stacks, e o `.env` da Laravel fora da imagem.
+
+**Motivos**
+- **Projeto comum:** quem abre `apis/laravel` ou `apis/nestjs` encontra as variáveis onde espera, no `.env` do projeto.
+- **Inicialização padrão do Laravel:** sem `.env` no container, o Laravel tentava ler o arquivo a cada teste e `make test-laravel` saía com um aviso por teste; o `bootstrap/app.php` precisava de um trecho próprio para desligar essa leitura.
+
+**Alternativas descartadas**
+- **Um `.env` vazio criado no build da imagem:** manteria os padrões no compose, mas o projeto continuaria sem `.env` de verdade.
+- **Manter o trecho que desliga a leitura do `.env`:** sem avisos, mas com o `bootstrap/app.php` fora do padrão.
+
+**Custos**
+- O `.env` criado uma vez não recebe as variáveis que entrarem depois no `.env.example`. Na Laravel, `config/*.php` tem o padrão de cada variável; na NestJS, uma variável ausente faz a aplicação falhar com `missing environment variable` quando ela é lida.
+- Na Laravel, trocar um valor exige `make up-laravel`, que reconstrói a imagem.

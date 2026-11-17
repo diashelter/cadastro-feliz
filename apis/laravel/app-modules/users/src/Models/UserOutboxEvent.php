@@ -2,6 +2,7 @@
 
 namespace Modules\Users\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Model;
 use Modules\Users\Enums\OutboxEventType;
 use Modules\Users\Enums\OutboxStatus;
@@ -12,22 +13,21 @@ use Modules\Users\Enums\OutboxStatus;
  * @property OutboxStatus $status
  * @property OutboxEventType $event_type
  */
+#[Table('users_outbox', keyType: 'string', incrementing: false, timestamps: false)]
 class UserOutboxEvent extends Model
 {
-    public $incrementing = false;
-
-    public $timestamps = false;
-
-    protected $table = 'users_outbox';
-
-    protected $keyType = 'string';
-
-    protected $casts = [
-        'payload' => 'array',
-        'attempts' => 'integer',
-        'status' => OutboxStatus::class,
-        'event_type' => OutboxEventType::class,
-    ];
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'payload' => 'array',
+            'attempts' => 'integer',
+            'status' => OutboxStatus::class,
+            'event_type' => OutboxEventType::class,
+        ];
+    }
 
     public function isTerminal(): bool
     {

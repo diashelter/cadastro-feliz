@@ -8,8 +8,8 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 NETWORK := cadastro-feliz-net
-# Sem --env-file: cada compose tem os padrões das próprias variáveis, e o Compose lê o .env
-# opcional da pasta do compose, que sobrescreve só aquele projeto (decisão 29).
+# Sem --env-file: o Compose lê o .env da pasta de cada compose. Os serviços comuns têm os
+# padrões no próprio compose (decisão 29); cada API tem o próprio .env (decisão 31).
 COMPOSE := docker compose
 SHARED := $(COMPOSE) -f docker-compose.yml
 WAIT := --wait --wait-timeout 180
@@ -28,15 +28,21 @@ stack_compose = $(COMPOSE) -f $(call stack_file,$(1))
 LARAVEL := $(call stack_compose,laravel)
 NEST := $(call stack_compose,nest)
 
-# Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa.
+# Cada API tem o próprio .env, criado a partir do .env.example dela quando não existe
+# (decisão 31). O Compose de uma stack precisa dele até para derrubá-la.
+stack_env = if [ -f "$(STACK_DIR_$(1))/.env.example" ] && [ ! -f "$(STACK_DIR_$(1))/.env" ]; then cp "$(STACK_DIR_$(1))/.env.example" "$(STACK_DIR_$(1))/.env"; fi
+
+# Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa, e
+# garante o .env da stack.
 define require_stack
 	@case " $(STACKS) " in *" $(1) "*) ;; *) echo "stack $(1) desconhecida" >&2; exit 1;; esac
 	@[ -f "$(call stack_file,$(1))" ] || { echo "stack $(1) ainda não implementada" >&2; exit 1; }
+	@$(call stack_env,$(1))
 endef
 
 # Derruba uma stack que tem compose, descartando os containers e a fila dela.
 define stack_down
-	@if [ -f "$(call stack_file,$(1))" ]; then $(call stack_compose,$(1)) down --volumes --remove-orphans; fi
+	@if [ -f "$(call stack_file,$(1))" ]; then $(call stack_env,$(1)); $(call stack_compose,$(1)) down --volumes --remove-orphans; fi
 
 endef
 

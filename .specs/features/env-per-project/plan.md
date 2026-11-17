@@ -2,6 +2,8 @@
 
 **Approved**: 2026-11-16 - user: "Aprovar e seguir"
 
+> Nota, 2026-11-16: depois de fechada, esta feature foi substituída em parte pela decisão 31 de docs/decisions.md. Nas APIs, os padrões saíram do compose e voltaram para um `.env.example` com `.env` próprio; os critérios e as provas das slices S2, S3 e S4 descrevem o estado anterior. S1 e S5 continuam valendo.
+
 ## Problem
 
 O `.env` da raiz guarda as variáveis de todos os projetos Compose: 36 linhas em `.env.example`, das quais `APP_KEY`, `APP_ENV`, `APP_DEBUG`, `REDIS_*` e `RABBITMQ_URL` só servem a uma ou duas stacks. Uma variável nova de uma stack mexe num arquivo comum a todas, na tabela de docs/infrastructure.md e nos testes. O `.env` é copiado de `.env.example` uma única vez e nunca mais recebe o que entra depois: o `.env` desta máquina não tem `OUTBOX_RETENTION_DAYS` nem `OUTBOX_ALERT_EMAIL`, e o compose da Laravel precisou de um valor padrão só para um `.env` antigo não zerar a retenção. Nenhuma stack recebe um valor próprio para um experimento sem que todas o recebam. A fonte (`.design/env-per-project.md`) não traz outra medição: não há produto.

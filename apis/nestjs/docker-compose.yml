@@ -9,30 +9,8 @@ x-node-build: &node-build
   # mudanças gera a mesma imagem, e o container não é recriado à toa.
   provenance: false
 
-# As variáveis de que a api e o worker precisam, com o padrão local. Um .env opcional em
-# apis/nestjs sobrescreve só esta stack (decisão 29).
-x-app-env: &app-env
-  CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
-  DB_HOST: ${DB_HOST:-postgres}
-  DB_PORT: ${DB_PORT:-5432}
-  DB_DATABASE: ${DB_DATABASE:-cadastro_feliz}
-  DB_USERNAME: ${DB_USERNAME:-cadastro_feliz}
-  DB_PASSWORD: ${DB_PASSWORD:-cadastro_feliz}
-  LIMITER_REDIS_HOST: ${LIMITER_REDIS_HOST:-redis-limiter}
-  LIMITER_REDIS_PORT: ${LIMITER_REDIS_PORT:-6379}
-  REDIS_HOST: ${REDIS_HOST:-redis}
-  REDIS_PORT: ${REDIS_PORT:-6379}
-  SMTP_HOST: ${SMTP_HOST:-mailpit}
-  SMTP_PORT: ${SMTP_PORT:-1025}
-  MAIL_FROM: ${MAIL_FROM:-no-reply@cadastro-feliz.local}
-  REGISTRATION_MAX_ATTEMPTS: ${REGISTRATION_MAX_ATTEMPTS:-5}
-  REGISTRATION_ATTEMPT_WINDOW_SECONDS: ${REGISTRATION_ATTEMPT_WINDOW_SECONDS:-900}
-  REGISTRATION_MAX_PER_IP: ${REGISTRATION_MAX_PER_IP:-20}
-  REGISTRATION_IP_WINDOW_SECONDS: ${REGISTRATION_IP_WINDOW_SECONDS:-3600}
-  OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
-  OUTBOX_REPUBLISH_AFTER_SECONDS: ${OUTBOX_REPUBLISH_AFTER_SECONDS:-300}
-  OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
-  OUTBOX_BACKOFF_BASE_SECONDS: ${OUTBOX_BACKOFF_BASE_SECONDS:-30}
+# As variáveis da stack ficam em apis/nestjs/.env, criado a partir de .env.example. O Compose
+# o entrega à api e ao worker, que leem as variáveis do processo (decisão 31).
 
 services:
   # POST /users e GET /health (src/main.ts). Não conecta ao redis da stack (Key decision 1).
@@ -48,7 +26,7 @@ services:
     # O limite de 1 s das conexões não cobre a resolução de nomes: sem isto, o nome de um
     # container parado segura a requisição por 5 s quando o DNS externo não responde.
     dns_opt: ["timeout:1", "attempts:1"]
-    environment: *app-env
+    env_file: .env
     healthcheck:
       # Saudável é a API responder /health, com 200 ou 503: uma dependência fora
       # do ar aparece no corpo, não como uma stack que não sobe.
@@ -78,7 +56,7 @@ services:
     command: ["node_modules/.bin/nest", "start", "--watch", "--preserveWatchOutput", "--entryFile", "worker"]
     init: true
     dns_opt: ["timeout:1", "attempts:1"]
-    environment: *app-env
+    env_file: .env
     depends_on:
       redis:
         condition: service_healthy

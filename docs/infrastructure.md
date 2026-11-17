@@ -103,7 +103,7 @@ Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `lara
 
 ### Sequência de `make up-<stack>`
 
-1. Cria a rede externa, se ainda não existir. Nenhum alvo cria arquivo de ambiente.
+1. Cria o `.env` da stack a partir do `.env.example` dela e a rede externa, se ainda não existirem.
 2. Derruba as outras stacks.
 3. Sobe o PostgreSQL, o `redis-limiter` e o Mailpit e espera que fiquem saudáveis. O `frontend` não é construído nem iniciado aqui; ele sobe com `make up-shared`.
 4. Executa o `migrate`. Se ele falha, o comando para com código diferente de zero e a stack não sobe.
@@ -149,7 +149,7 @@ O `nginx` publica a porta 8080 e encaminha toda requisição para o Laravel no `
 - **O código entra por cópia, não por bind mount.** A imagem leva o código e o `vendor/`. Com `make watch-laravel` rodando, cada edição vale na próxima requisição, sem reiniciar o `php-fpm`, na próxima execução do relay, sem reiniciar o `scheduler`, e o `horizon` reinicia para usar o código novo. `vendor/` nunca existe na máquina.
 - **Falha rápida.** O `php-fpm` limita a resolução de nomes a 1 s, para uma dependência parada não segurar a resposta, e o `scheduler` publica na fila com tempo limite de 1 s, para uma fila travada não segurar o lote. O limite de conexão não cobre a resolução de nomes, que levaria 5 s quando o DNS externo não responde.
 - **Saudável é o Laravel responder `/health`.** O `nginx` fica saudável quando `GET /health` responde `200` ou `503`; o `php-fpm`, quando responde ao ping do FPM. Uma dependência fora do ar aparece no corpo de `/health`, e a stack continua no ar.
-- **Variáveis do compose da stack.** O compose entrega ao `php-fpm`, ao `scheduler` e ao `horizon` as variáveis de que o Laravel precisa, com os padrões locais. Um `apis/laravel/.env` opcional sobrescreve só esta stack e fica fora da imagem, então o Laravel nunca lê `.env` dentro do container.
+- **Variáveis no `.env` da stack.** `apis/laravel/.env`, criado a partir de `.env.example`, entra na imagem, e o Laravel o lê na inicialização padrão, em `bootstrap/app.php`. O compose só define o que é próprio de um container, como os limites de tempo do Redis. Uma edição no `.env` vale depois de `make up-laravel`, que reconstrói a imagem.
 - **Nenhuma tabela do framework.** Sessão e cache ficam em memória, a fila fica no `redis`, as falhas de envio ficam em `users_outbox`, as demais falhas de job ficam só no Horizon e o log vai para a saída de erro do container, que `make logs-laravel` acompanha.
 
 ## Integração contínua
@@ -176,11 +176,14 @@ Como `localhost:3000` e `localhost:8080` são origens diferentes, cada API preci
 
 ## Variáveis de ambiente
 
-Cada projeto Compose declara as variáveis de que precisa, com o padrão local escrito no próprio compose, e nenhum alvo do `Makefile` cria arquivo de ambiente: um clone limpo sobe tudo, e uma variável nova chega com o código (decisão 29 de [decisions.md](decisions.md)). Os padrões são para uso local, sem nenhum segredo real, inclusive o `APP_KEY` do Laravel.
+Cada projeto cuida das próprias variáveis. Os valores são para uso local, sem nenhum segredo real, inclusive o `APP_KEY` do Laravel.
 
-Para trocar um valor, crie um `.env` ao lado do compose do projeto: na raiz para `shared`, em `apis/laravel` para `laravel` e em `apis/nestjs` para `nest`. O arquivo é opcional, ignorado pelo git e só vale para aquele projeto; um valor usado por vários projetos, como `DB_PASSWORD`, é trocado em cada um. Os padrões das regras de negócio são os mesmos em todas as stacks.
+- **APIs (`laravel`, `nest`):** cada uma tem um `.env.example` versionado e o próprio `.env`, ignorado pelo git, como num projeto comum (decisão 31 de [decisions.md](decisions.md)). Um alvo de stack do `Makefile` cria o `.env` a partir do `.env.example` quando ele não existe. Na Laravel, o `.env` entra na imagem e o framework o lê; na NestJS, o Compose o entrega à `api` e ao `worker`, que leem as variáveis do processo. Para trocar um valor, edite o `.env` da stack e rode `make up-<stack>`. Uma variável nova entra no `.env.example`; um `.env` já criado não a recebe sozinho, e a aplicação usa o padrão do código até ela ser copiada.
+- **Serviços comuns (`shared`):** o `docker-compose.yml` da raiz traz o padrão de cada variável, e nenhum arquivo precisa existir. Um `.env` opcional na raiz sobrescreve só esses serviços (decisão 29).
 
-A coluna Projetos diz quais composes declaram a variável: `shared` é o `docker-compose.yml` da raiz, `laravel` é `apis/laravel` e `nest` é `apis/nestjs`.
+Um valor usado por vários projetos, como `DB_PASSWORD`, é trocado em cada um. Os padrões das regras de negócio são os mesmos nas duas APIs.
+
+A coluna Projetos diz quem declara a variável: `shared` é o `docker-compose.yml` da raiz, `laravel` é `apis/laravel/.env.example` e `nest` é `apis/nestjs/.env.example`.
 
 ### Compartilhadas
 
@@ -222,6 +225,6 @@ A coluna Projetos diz quais composes declaram a variável: `shared` é o `docker
 | `REDIS_HOST` | `redis` | `laravel`, `nest` | Host do Redis da fila |
 | `REDIS_PORT` | `6379` | `laravel`, `nest` | Porta do Redis da fila |
 | `RABBITMQ_URL` | `amqp://guest:guest@rabbitmq:5672/` | `go` | Endereço do RabbitMQ; entra no compose da stack Go quando ela existir |
-| `APP_KEY` | `base64:` seguido de 32 bytes, fixo no compose | `laravel` | Chave do Laravel |
+| `APP_KEY` | `base64:` seguido de 32 bytes, fixo em `.env.example` | `laravel` | Chave do Laravel |
 | `APP_ENV` | `local` | `laravel` | Ambiente do Laravel |
 | `APP_DEBUG` | `true` | `laravel` | Modo de depuração do Laravel |
