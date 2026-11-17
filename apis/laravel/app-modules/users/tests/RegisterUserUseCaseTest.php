@@ -1,11 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
-use Modules\Users\Models\User;
-use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\Repositories\UserRepository;
-use Modules\Users\Services\RegistrationLimiter;
-use Modules\Users\UseCases\RegisterUser;
+use Modules\Users\Core\Services\RegistrationLimiter;
+use Modules\Users\Core\UseCases\RegisterUser;
+use Modules\Users\Persistence\Models\User;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\UserRepository;
 
 function registeredUser(): User
 {

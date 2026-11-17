@@ -1,12 +1,12 @@
 <?php
 
-namespace Modules\Users\Models;
+namespace Modules\Users\Persistence\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Model;
-use Modules\Users\Enums\OutboxEventType;
-use Modules\Users\Enums\OutboxStatus;
+use Modules\Users\Core\Enums\OutboxEventType;
+use Modules\Users\Core\Enums\OutboxStatus;
 
 /**
  * Uma linha de users_outbox. O ciclo de status está em docs/database.md.

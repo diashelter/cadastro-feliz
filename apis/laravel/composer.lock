@@ -3115,9 +3115,16 @@
             "dist": {
                 "type": "path",
                 "url": "app-modules/users",
-                "reference": "a3e71b9cb2ddb50232f89bfb1cfa843a8bbc1261"
+                "reference": "34dcfcbc5f5339004da3ab466204fe070c6d804d"
             },
             "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Modules\\Users\\Http\\RouteServiceProvider"
+                    ]
+                }
+            },
             "autoload": {
                 "psr-4": {
                     "Modules\\Users\\": "src/"

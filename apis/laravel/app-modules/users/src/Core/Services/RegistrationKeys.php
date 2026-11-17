@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Users\Services;
+namespace Modules\Users\Core\Services;
 
 /** As chaves do redis-limiter, com a regra de hash de docs/api-contract.md. */
 class RegistrationKeys

@@ -1,9 +1,9 @@
 <?php
 
-namespace Modules\Users\Services;
+namespace Modules\Users\Core\Services;
 
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
-use Modules\Users\Exceptions\RegistrationLimited;
+use Modules\Users\Core\Exceptions\RegistrationLimited;
 use RuntimeException;
 
 /**

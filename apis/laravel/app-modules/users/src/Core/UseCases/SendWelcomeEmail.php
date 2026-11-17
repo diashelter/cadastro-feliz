@@ -1,11 +1,11 @@
 <?php
 
-namespace Modules\Users\UseCases;
+namespace Modules\Users\Core\UseCases;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Modules\Users\Mail\WelcomeMail;
-use Modules\Users\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 use Throwable;
 
 /**

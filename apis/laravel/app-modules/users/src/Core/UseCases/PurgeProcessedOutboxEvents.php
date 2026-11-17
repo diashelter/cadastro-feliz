@@ -1,9 +1,9 @@
 <?php
 
-namespace Modules\Users\UseCases;
+namespace Modules\Users\Core\UseCases;
 
 use InvalidArgumentException;
-use Modules\Users\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 
 /**
  * Apaga os eventos processed concluídos há mais de OUTBOX_RETENTION_DAYS dias. Nenhum outro

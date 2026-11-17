@@ -1,9 +1,9 @@
 <?php
 
-use Modules\Users\Enums\OutboxEventType;
-use Modules\Users\Enums\OutboxStatus;
-use Modules\Users\Models\UserOutboxEvent;
-use Modules\Users\Services\RetryPolicy;
+use Modules\Users\Core\Enums\OutboxEventType;
+use Modules\Users\Core\Enums\OutboxStatus;
+use Modules\Users\Core\Services\RetryPolicy;
+use Modules\Users\Persistence\Models\UserOutboxEvent;
 
 it('lists the statuses and which are terminal', function () {
     expect(array_map(fn (OutboxStatus $s) => [$s->value, $s->isTerminal()], OutboxStatus::cases()))->toBe([
@@ -40,7 +40,7 @@ it('casts the outbox row to the enums', function () {
             }
         }
     }
-    expect($code)->toHaveKey(base_path('app-modules/users/src/Models/UserOutboxEvent.php'))
+    expect($code)->toHaveKey(base_path('app-modules/users/src/Persistence/Models/UserOutboxEvent.php'))
         ->and(array_keys(array_filter($code, fn (string $c) => str_contains($c, 'TERMINAL_STATUSES'))))->toBe([]);
 });
 

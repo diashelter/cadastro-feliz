@@ -1,12 +1,12 @@
 <?php
 
-namespace Modules\Users\Repositories;
+namespace Modules\Users\Persistence\Repositories;
 
 use Illuminate\Support\Facades\DB;
-use Modules\Users\Enums\OutboxEventType;
-use Modules\Users\Enums\OutboxStatus;
-use Modules\Users\Models\UserOutboxEvent;
-use Modules\Users\Services\RetryPolicy;
+use Modules\Users\Core\Enums\OutboxEventType;
+use Modules\Users\Core\Enums\OutboxStatus;
+use Modules\Users\Core\Services\RetryPolicy;
+use Modules\Users\Persistence\Models\UserOutboxEvent;
 
 /**
  * As consultas de docs/database.md. Só este módulo escreve em users_outbox, e nenhum método

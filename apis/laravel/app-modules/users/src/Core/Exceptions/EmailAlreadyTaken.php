@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Users\Exceptions;
+namespace Modules\Users\Core\Exceptions;
 
 use RuntimeException;
 

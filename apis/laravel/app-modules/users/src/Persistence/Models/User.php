@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Users\Models;
+namespace Modules\Users\Persistence\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;

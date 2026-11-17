@@ -4,7 +4,7 @@ namespace Modules\Users\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\UseCases\NotifyFailedOutboxEvents;
+use Modules\Users\Core\UseCases\NotifyFailedOutboxEvents;
 use Throwable;
 
 /** Agendado a cada 5 min: um resumo ao operador com os eventos failed ainda não avisados. */

@@ -9,5 +9,12 @@
             "Modules\\Users\\": "src/"
         }
     },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Users\\Http\\RouteServiceProvider"
+            ]
+        }
+    },
     "minimum-stability": "stable"
 }

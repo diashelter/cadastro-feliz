@@ -4,10 +4,10 @@ namespace Modules\Users\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\Exceptions\EmailAlreadyTaken;
-use Modules\Users\Exceptions\RegistrationLimited;
+use Modules\Users\Core\Exceptions\EmailAlreadyTaken;
+use Modules\Users\Core\Exceptions\RegistrationLimited;
+use Modules\Users\Core\UseCases\RegisterUser;
 use Modules\Users\Http\Requests\StoreUserRequest;
-use Modules\Users\UseCases\RegisterUser;
 use Throwable;
 
 /**
