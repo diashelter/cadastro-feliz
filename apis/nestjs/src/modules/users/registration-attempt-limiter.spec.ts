@@ -4,8 +4,8 @@ import { RegistrationAttemptLimiter, RegistrationLimited } from './registration-
 import { attemptsKey, quotaKey } from './registration-keys';
 
 // O limitador sobre um dublê em memória dos comandos do ioredis que ele usa, com o relógio na
-// mão do teste. O comportamento contra o redis-limiter real é provado pelos casos RG de
-// tests/infra/registration.sh.
+// mão do teste. O comportamento contra o redis-limiter real é conferido subindo a stack
+// (decisão 30).
 
 const IP = '203.0.113.10';
 const EMAIL = 'ana@example.com';

@@ -32,7 +32,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 
 - **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição, e reinicia o `horizon`, porque um worker de longa duração não recarrega o código. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
 - **Dependências:** `make laravel-composer ARGS="<comando composer>"` é o único caminho, e só `composer.json` e `composer.lock` mudam na máquina.
-- **Testes:** Pest, em `app-modules/<nome>/tests`, rodando com `make test-laravel` num container descartável, com dependências simuladas. O comportamento contra PostgreSQL, Redis e Mailpit reais fica em `tests/infra`.
+- **Testes:** Pest, em `app-modules/<nome>/tests`, rodando com `make test-laravel` num container descartável, com dependências simuladas. Não há testes contra PostgreSQL, Redis e Mailpit reais: os [cenários de validação](architecture.md#cenários-para-validar-a-implementação) são conferidos subindo a stack (decisão 30).
 - **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. As variáveis e os padrões locais estão no compose da stack; um `apis/laravel/.env` opcional sobrescreve só esta stack e nunca entra na imagem (decisão 29).
 
 **Como o outbox funciona aqui**
@@ -136,9 +136,6 @@ apis/nestjs/
     │   ├── validation.spec.ts
     │   ├── cors.ts
     │   └── contract-exception.filter.ts
-    ├── scripts/              # usados por tests/infra
-    │   ├── queue-control.ts
-    │   └── relay-once.ts
     └── modules/
         ├── health/
         │   ├── health.module.ts
@@ -257,6 +254,4 @@ cadastro-feliz/
 - **Relay:** publica eventos prontos, ignora os que estão em espera e republica os expirados.
 - **Worker:** marca `processed`, ignora eventos terminais, aplica backoff e chega a `failed`.
 
-Os [cenários de validação](architecture.md#cenários-para-validar-a-implementação) cobrem o fluxo de ponta a ponta.
-
-Toda stack é aceita pelos casos de contrato de `tests/infra`, em `registration.sh` e `outbox.sh`, por meio do próprio adaptador em `tests/infra/adapters`. Os casos internos de uma stack ficam num arquivo dela, como `laravel-outbox.sh` e `nest.sh` (decisão 23 de [decisions.md](decisions.md)), e `stack-switch.sh` troca entre Laravel e NestJS.
+Esses testes rodam dentro da suíte de cada stack (`make test-laravel`, `make test-nest`), com dependências simuladas. O fluxo de ponta a ponta, contra os serviços reais, é conferido subindo a stack e seguindo os [cenários de validação](architecture.md#cenários-para-validar-a-implementação); o projeto não tem testes de infraestrutura nem suíte de contrato (decisão 30 de [decisions.md](decisions.md)).

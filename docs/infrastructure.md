@@ -1,6 +1,6 @@
 # Infraestrutura
 
-> **Status:** em construção. O `Makefile` e o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, existem e são testados por `make test-infra`, também no [CI](#integração-contínua). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, e é testado por `make test-infra` e `make test-laravel`. O da stack NestJS existe, com `api`, `worker` e `redis`, e é testado por `make test-infra` e `make test-nest`. O da stack Go ainda não foi criado.
+> **Status:** em construção. O `Makefile` e o `docker-compose.yml` dos serviços compartilhados, com o `frontend`, existem. A infraestrutura não tem testes: um problema aparece ao subir o ambiente (decisão 30 de [decisions.md](decisions.md)). O compose da stack Laravel existe, com `nginx`, `php-fpm`, `scheduler`, `horizon` e `redis`, e a stack é testada por `make test-laravel`. O da stack NestJS existe, com `api`, `worker` e `redis`, e a stack é testada por `make test-nest`. O da stack Go ainda não foi criado.
 
 Tudo roda em Docker. A única dependência na máquina é Docker com Docker Compose 2.39 ou mais recente, além do `make`. Versões anteriores recusam o `docker-compose.yml`, porque não conhecem o campo `build.provenance` do `frontend`.
 
@@ -98,7 +98,6 @@ Dentro da rede Docker, o SMTP do Mailpit responde em `mailpit:1025` e o contador
 | `make logs-laravel`, `make logs-nest`, `make logs-go` | Acompanha os logs da stack |
 | `make logs-shared` | Acompanha os logs dos serviços compartilhados |
 | `make reset-limits` | Limpa os contadores de tentativas no `redis-limiter` |
-| `make test-infra` | Testa a infraestrutura contra o Docker local. Destrói o ambiente `cadastro-feliz-*`, então recusa rodar se ele já existir. Para rodar só algumas entradas de `tests/infra`, use `bash tests/infra/run.sh docs migrate`; um arquivo de contrato leva a stack, como em `bash tests/infra/run.sh registration:laravel`, e sem ela usa `STACK`, com `laravel` como padrão |
 
 Cada stack é um nome curto ligado a um diretório e a um projeto Compose: `laravel` usa `apis/laravel` e o projeto `cadastro-feliz-laravel`, `nest` usa `apis/nestjs` e `cadastro-feliz-nest`, `go` usa `apis/golang` e `cadastro-feliz-go`. Um alvo de stack sem compose recusa com `stack <nome> ainda não implementada`, e um nome fora dessa lista recusa com `stack <nome> desconhecida`, nos dois casos antes de alterar qualquer coisa. Para acrescentar uma stack, basta criar o compose dela, com `name: cadastro-feliz-<nome>` e a rede `cadastro-feliz-net` declarada como externa.
 
@@ -162,10 +161,8 @@ O workflow `.github/workflows/ci.yml` roda no GitHub Actions a cada pull request
 | Frontend (tipos e testes) | `make test-frontend` |
 | Laravel (testes) | `make test-laravel` |
 | NestJS (tipos e testes) | `make test-nest` |
-| Lista os testes de infraestrutura | `bash tests/infra/run.sh --list`, que imprime as entradas de `tests/infra` na ordem do `make test-infra` |
-| Infraestrutura (`<entrada>`) | `bash tests/infra/run.sh <entrada>`, um job por entrada da lista |
 
-Os testes de infraestrutura destroem e recriam o ambiente `cadastro-feliz-*`, então cada entrada roda em um runner próprio, em paralelo. A matriz vem de `run.sh --list`, e por isso um arquivo novo entra no CI quando é acrescentado à lista `FILES` de `tests/infra/run.sh`, sem mudar o workflow. Um arquivo de contrato, como `registration` e `outbox`, roda uma vez por adaptador em `tests/infra/adapters`, como a entrada `<arquivo>:<stack>`: a stack nova entra no CI quando ganha o adaptador dela (decisão 23 de [decisions.md](decisions.md)). Hoje são as entradas `registration:laravel`, `registration:nest`, `outbox:laravel` e `outbox:nest`, além dos arquivos internos `laravel-outbox` e `nest` e de `stack-switch`, que troca entre Laravel e NestJS com um evento aberto. Um push novo no mesmo branch cancela a execução anterior.
+Só os testes da aplicação rodam no CI; a infraestrutura não tem testes (decisão 30 de [decisions.md](decisions.md)). Um push novo no mesmo branch cancela a execução anterior.
 
 ## Comunicação do frontend
 
@@ -181,7 +178,7 @@ Como `localhost:3000` e `localhost:8080` são origens diferentes, cada API preci
 
 Cada projeto Compose declara as variáveis de que precisa, com o padrão local escrito no próprio compose, e nenhum alvo do `Makefile` cria arquivo de ambiente: um clone limpo sobe tudo, e uma variável nova chega com o código (decisão 29 de [decisions.md](decisions.md)). Os padrões são para uso local, sem nenhum segredo real, inclusive o `APP_KEY` do Laravel.
 
-Para trocar um valor, crie um `.env` ao lado do compose do projeto: na raiz para `shared`, em `apis/laravel` para `laravel` e em `apis/nestjs` para `nest`. O arquivo é opcional, ignorado pelo git e só vale para aquele projeto; um valor usado por vários projetos, como `DB_PASSWORD`, é trocado em cada um. Os padrões das regras de negócio são os mesmos em todas as stacks, e `make test-infra` falha se um compose divergir desta tabela.
+Para trocar um valor, crie um `.env` ao lado do compose do projeto: na raiz para `shared`, em `apis/laravel` para `laravel` e em `apis/nestjs` para `nest`. O arquivo é opcional, ignorado pelo git e só vale para aquele projeto; um valor usado por vários projetos, como `DB_PASSWORD`, é trocado em cada um. Os padrões das regras de negócio são os mesmos em todas as stacks.
 
 A coluna Projetos diz quais composes declaram a variável: `shared` é o `docker-compose.yml` da raiz, `laravel` é `apis/laravel` e `nest` é `apis/nestjs`.
 

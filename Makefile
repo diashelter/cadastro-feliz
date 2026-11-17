@@ -40,7 +40,7 @@ define stack_down
 
 endef
 
-.PHONY: help network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel nest-npm test-nest down status logs-shared reset-limits test-infra
+.PHONY: help network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel nest-npm test-nest down status logs-shared reset-limits
 
 help:
 	@echo "Alvos:"
@@ -61,7 +61,6 @@ help:
 	@echo "  make logs-shared        acompanha os logs dos serviços comuns"
 	@echo "  make logs-<stack>       acompanha os logs de uma stack"
 	@echo "  make reset-limits       limpa os contadores de tentativas"
-	@echo "  make test-infra         testa a infraestrutura (destrói o ambiente local)"
 
 network:
 	@docker network inspect $(NETWORK) >/dev/null 2>&1 || docker network create $(NETWORK) >/dev/null
@@ -183,6 +182,3 @@ logs-%:
 
 reset-limits:
 	$(SHARED) exec -T redis-limiter redis-cli FLUSHALL
-
-test-infra:
-	@bash tests/infra/run.sh

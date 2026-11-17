@@ -35,6 +35,7 @@
 | [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |
 | [28](#28-limitador-de-cada-stack-sem-lua) | Limitador de cada stack, sem Lua | Definida |
 | [29](#29-variáveis-de-ambiente-por-projeto-compose) | Variáveis de ambiente por projeto Compose | Definida |
+| [30](#30-só-testes-da-aplicação) | Só testes da aplicação | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -275,6 +276,8 @@ Todo e-mail de boas-vindas sai com o `Message-ID` `<event_id>@cadastro-feliz.loc
 
 ## 23. Suíte de contrato por stack
 
+**Substituída** pela [decisão 30](#30-só-testes-da-aplicação): `tests/infra`, com a suíte de contrato e os adaptadores, foi removido. O texto abaixo registra a decisão como era.
+
 Os casos de `tests/infra` que valem para qualquer stack, em `registration.sh` e `outbox.sh`, são os casos de contrato: só observam a porta 8080, o PostgreSQL, o `redis-limiter` e o Mailpit, e só agem sobre a stack pelo adaptador dela, `tests/infra/adapters/<stack>.sh`. O adaptador define um vocabulário de papéis, como parar o worker, parar o relay, congelar a fila e publicar uma mensagem sem o relay, e não de containers. Os ids não mudam de uma stack para outra; a stack aparece na linha `== <arquivo>:<stack>` antes dos casos. O que é interno de uma stack fica num arquivo dela, como `laravel-outbox.sh`. O detalhamento está no [design](../.design/nestjs-stack.md) e no [plano](../.specs/features/contract-suite/plan.md).
 
 **Motivos**
@@ -402,3 +405,17 @@ Cada projeto Compose (`cadastro-feliz-shared`, `cadastro-feliz-laravel`, `cadast
 **Custos**
 - Valores usados por vários projetos (`DB_*`, `CORS_ALLOWED_ORIGIN`, `API_PORT`) se repetem nos composes, e trocar um deles localmente é sobrescrever em cada projeto que o usa.
 - O `.env` antigo e completo de quem já clonou continua na raiz; os serviços comuns só leem dele as próprias variáveis, com os mesmos valores dos padrões, e as stacks não o enxergam.
+
+## 30. Só testes da aplicação
+
+O projeto só tem os testes da aplicação: `make test-frontend`, `make test-laravel` e `make test-nest`, que rodam num container descartável, com dependências simuladas, na máquina e no CI. `tests/infra`, com os testes de infraestrutura, a suíte de contrato, os adaptadores e o alvo `make test-infra`, foi removido, e com ele os scripts de `apis/nestjs/src/scripts`, que só existiam para os adaptadores. Os jobs de infraestrutura saíram do CI. Um compose, uma imagem ou um alvo do `Makefile` com problema aparece ao subir o ambiente, e o fluxo de ponta a ponta é conferido seguindo os [cenários de validação](architecture.md#cenários-para-validar-a-implementação).
+
+**Substitui** a [decisão 23](#23-suíte-de-contrato-por-stack).
+
+**Motivos**
+- **A falha aparece ao subir:** a infraestrutura é local e de uso próprio; quem a sobe vê na hora um serviço que não fica saudável.
+- **Suíte cara e presa a uma plataforma:** os testes destruíam e recriavam o ambiente, levavam um runner por arquivo no CI e só rodavam inteiros em Linux, com bash 5 e as ferramentas do GNU.
+
+**Custos**
+- O que só a suíte de contrato provava fica sem teste automático: o limite e a cota contra o `redis-limiter` real, a cota com requisições paralelas, a entrega do outbox de ponta a ponta, a troca entre stacks com um evento aberto e os comandos de manutenção do outbox contra o PostgreSQL e o Mailpit reais. Esses comportamentos passam a ser conferidos à mão, pelos cenários de validação.
+- Uma stack nova deixa de ser aceita pelos mesmos casos automáticos; as suítes de cada stack cobrem só o que dá para simular.

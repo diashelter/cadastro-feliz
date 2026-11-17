@@ -196,12 +196,6 @@ Limpar os contadores de tentativas, para repetir testes do `429`:
 make reset-limits
 ```
 
-Testar a infraestrutura. Os testes destroem o ambiente `cadastro-feliz-*`, então recusam rodar se ele já existir:
-
-```bash
-make test-infra
-```
-
 ### Endereços
 
 | Serviço | Endereço | Disponível |
@@ -220,9 +214,8 @@ cadastro-feliz/
 ├── README.md
 ├── Makefile
 ├── docker-compose.yml        # serviços compartilhados
-├── .github/workflows/        # CI: make test-frontend, make test-laravel, make test-nest e tests/infra
+├── .github/workflows/        # CI: make test-frontend, make test-laravel e make test-nest
 ├── database/migrations/      # schema canônico em SQL
-├── tests/infra/              # testes da infraestrutura (make test-infra)
 ├── docs/
 ├── frontend/                 # Next.js em next dev, com o formulário
 └── apis/

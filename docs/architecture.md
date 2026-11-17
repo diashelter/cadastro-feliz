@@ -114,15 +114,15 @@ Republicar uma mensagem perdida não conta como tentativa, porque nenhum envio f
 
 ## Antes e depois do outbox
 
-A stack Laravel nasceu sem o outbox, para a perda do e-mail ser observada antes de corrigida (decisão 21). Os testes de `tests/infra/outbox.sh` afirmavam a perda e agora afirmam a correção, com os mesmos ids.
+A stack Laravel nasceu sem o outbox, para a perda do e-mail ser observada antes de corrigida (decisão 21). Cada caso tem o cenário de validação que o reproduz, quando há um.
 
-| Caso | Sem outbox | Com outbox | Prova |
+| Caso | Sem outbox | Com outbox | Cenário |
 |---|---|---|---|
-| Fila parada no cadastro | `201`, e o e-mail nunca sai; repetir o cadastro dá `409` | `201`, evento `pending`, e o e-mail sai quando a fila volta; repetir dá `409`, sem segundo e-mail | LM1, cenário 8 |
-| `horizon` parado e a stack derrubada | O job só existia no Redis, e o e-mail nunca sai | O evento `published` sobrevive, e o e-mail sai depois da republicação | LM2, cenário 6 |
-| SMTP fora até esgotar as tentativas | A falha fica só no Horizon, sem registro no PostgreSQL, e o e-mail nunca sai | `failed`, com `attempts` e `last_error`; nada sai sozinho, e o [reprocessamento manual](database.md#reprocessar-um-evento-em-failed) entrega o e-mail | LM3 |
-| SMTP volta antes de esgotar as tentativas | O e-mail sai pelas retentativas do Horizon | `attempts` sobe no banco, e o e-mail sai | RG26, cenário 5 |
-| API cai entre as duas escritas | Usuário gravado e e-mail perdido, sem nem o log | A janela não existe, porque as escritas são uma só transação | OB4, cenário 4 |
+| Fila parada no cadastro | `201`, e o e-mail nunca sai; repetir o cadastro dá `409` | `201`, evento `pending`, e o e-mail sai quando a fila volta; repetir dá `409`, sem segundo e-mail | 8 |
+| `horizon` parado e a stack derrubada | O job só existia no Redis, e o e-mail nunca sai | O evento `published` sobrevive, e o e-mail sai depois da republicação | 6 |
+| SMTP fora até esgotar as tentativas | A falha fica só no Horizon, sem registro no PostgreSQL, e o e-mail nunca sai | `failed`, com `attempts` e `last_error`; nada sai sozinho, e o [reprocessamento manual](database.md#reprocessar-um-evento-em-failed) entrega o e-mail | nenhum |
+| SMTP volta antes de esgotar as tentativas | O e-mail sai pelas retentativas do Horizon | `attempts` sobe no banco, e o e-mail sai | 5 |
+| API cai entre as duas escritas | Usuário gravado e e-mail perdido, sem nem o log | A janela não existe, porque as escritas são uma só transação | 4 |
 
 ## Garantias e limites
 
