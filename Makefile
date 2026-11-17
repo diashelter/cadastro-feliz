@@ -8,7 +8,9 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 NETWORK := cadastro-feliz-net
-COMPOSE := docker compose --env-file .env
+# Sem --env-file: o Compose lê o .env da pasta de cada compose. Os serviços comuns têm os
+# padrões no próprio compose (decisão 29); cada API tem o próprio .env (decisão 31).
+COMPOSE := docker compose
 SHARED := $(COMPOSE) -f docker-compose.yml
 WAIT := --wait --wait-timeout 180
 
@@ -26,19 +28,25 @@ stack_compose = $(COMPOSE) -f $(call stack_file,$(1))
 LARAVEL := $(call stack_compose,laravel)
 NEST := $(call stack_compose,nest)
 
-# Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa.
+# Cada API tem o próprio .env, criado a partir do .env.example dela quando não existe
+# (decisão 31). O Compose de uma stack precisa dele até para derrubá-la.
+stack_env = if [ -f "$(STACK_DIR_$(1))/.env.example" ] && [ ! -f "$(STACK_DIR_$(1))/.env" ]; then cp "$(STACK_DIR_$(1))/.env.example" "$(STACK_DIR_$(1))/.env"; fi
+
+# Recusa um nome desconhecido ou uma stack sem compose, antes de alterar qualquer coisa, e
+# garante o .env da stack.
 define require_stack
 	@case " $(STACKS) " in *" $(1) "*) ;; *) echo "stack $(1) desconhecida" >&2; exit 1;; esac
 	@[ -f "$(call stack_file,$(1))" ] || { echo "stack $(1) ainda não implementada" >&2; exit 1; }
+	@$(call stack_env,$(1))
 endef
 
 # Derruba uma stack que tem compose, descartando os containers e a fila dela.
 define stack_down
-	@if [ -f "$(call stack_file,$(1))" ]; then $(call stack_compose,$(1)) down --volumes --remove-orphans; fi
+	@if [ -f "$(call stack_file,$(1))" ]; then $(call stack_env,$(1)); $(call stack_compose,$(1)) down --volumes --remove-orphans; fi
 
 endef
 
-.PHONY: help env network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel nest-npm test-nest down status logs-shared reset-limits test-infra
+.PHONY: help network up-shared migrate watch-frontend frontend-npm test-frontend laravel-composer test-laravel nest-npm test-nest down status logs-shared reset-limits
 
 help:
 	@echo "Alvos:"
@@ -59,24 +67,20 @@ help:
 	@echo "  make logs-shared        acompanha os logs dos serviços comuns"
 	@echo "  make logs-<stack>       acompanha os logs de uma stack"
 	@echo "  make reset-limits       limpa os contadores de tentativas"
-	@echo "  make test-infra         testa a infraestrutura (destrói o ambiente local)"
-
-env:
-	@[ -f .env ] || cp .env.example .env
 
 network:
 	@docker network inspect $(NETWORK) >/dev/null 2>&1 || docker network create $(NETWORK) >/dev/null
 
-up-shared: env network
+up-shared: network
 	$(SHARED) up --detach $(WAIT) $(BACKING)
 	$(SHARED) up --detach --build $(WAIT) frontend
 
-migrate: env network
+migrate: network
 	$(SHARED) up --detach $(WAIT) $(BACKING)
 	$(SHARED) --profile tools run --rm migrate
 
 # Em primeiro plano. Ctrl+C encerra só a sincronização; o container continua no ar.
-watch-frontend: env network
+watch-frontend: network
 	$(SHARED) up --detach --build $(WAIT) frontend
 	$(SHARED) watch --no-up frontend
 
@@ -84,7 +88,7 @@ watch-frontend: env network
 # grava package.json e package-lock.json: node_modules nunca vai para a máquina.
 frontend-npm:
 	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make frontend-npm ARGS="<comando npm>"' >&2; exit 1; }
-	@$(MAKE) --no-print-directory env network
+	@$(MAKE) --no-print-directory network
 	$(SHARED) run --rm --no-deps --user "$$(id -u):$$(id -g)" \
 		--env HOME=/tmp --env npm_config_package_lock_only=true \
 		--volume "$(CURDIR)/frontend:/app" frontend npm $(ARGS)
@@ -92,7 +96,7 @@ frontend-npm:
 # Constrói a imagem com o código atual e roda os testes num container descartável:
 # o container do frontend em execução não é recriado nem parado. A rede só existe
 # durante o alvo quando ele a criou, para não deixar ambiente para trás.
-test-frontend: env
+test-frontend:
 	@created=0; \
 	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
 		docker network create $(NETWORK) >/dev/null && created=1; \
@@ -104,7 +108,7 @@ test-frontend: env
 
 up-%:
 	$(call require_stack,$*)
-	@$(MAKE) --no-print-directory env network
+	@$(MAKE) --no-print-directory network
 	$(foreach other,$(filter-out $*,$(STACKS)),$(call stack_down,$(other)))
 	@$(MAKE) --no-print-directory migrate
 	$(call stack_compose,$*) up --detach --build $(WAIT)
@@ -122,14 +126,14 @@ watch-%:
 laravel-composer:
 	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make laravel-composer ARGS="<comando composer>"' >&2; exit 1; }
 	$(call require_stack,laravel)
-	@$(MAKE) --no-print-directory env network
+	@$(MAKE) --no-print-directory network
 	$(LARAVEL) run --rm --no-deps --user "$$(id -u):$$(id -g)" --env HOME=/tmp composer \
 		sh -c 'cp -R /src/. /tmp/app && cd /tmp/app && composer "$$@" && cp composer.json composer.lock /src/' \
 		composer $(ARGS)
 
 # Como test-frontend: constrói a imagem com o código atual e roda os testes num
 # container descartável, sem dependências e sem tocar no php-fpm em execução.
-test-laravel: env
+test-laravel:
 	$(call require_stack,laravel)
 	@created=0; \
 	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
@@ -146,13 +150,13 @@ test-laravel: env
 nest-npm:
 	@[ -n "$(strip $(ARGS))" ] || { echo 'uso: make nest-npm ARGS="<comando npm>"' >&2; exit 1; }
 	$(call require_stack,nest)
-	@$(MAKE) --no-print-directory env network
+	@$(MAKE) --no-print-directory network
 	$(NEST) run --rm --no-deps --user "$$(id -u):$$(id -g)" \
 		--env HOME=/tmp --env npm_config_package_lock_only=true npm npm $(ARGS)
 
 # Como test-laravel: constrói a imagem com o código atual e roda o type check e o Vitest num
 # container descartável, sem dependências e sem tocar na api e no worker em execução.
-test-nest: env
+test-nest:
 	$(call require_stack,nest)
 	@created=0; \
 	if ! docker network inspect $(NETWORK) >/dev/null 2>&1; then \
@@ -167,7 +171,7 @@ down-%:
 	$(call require_stack,$*)
 	$(call stack_compose,$*) down --volumes --remove-orphans
 
-down: env
+down:
 	$(foreach stack,$(STACKS),$(call stack_down,$(stack)))
 	$(SHARED) --profile tools down --remove-orphans
 	@if docker network inspect $(NETWORK) >/dev/null 2>&1; then docker network rm $(NETWORK) >/dev/null; fi
@@ -175,15 +179,12 @@ down: env
 status:
 	@docker ps --all --filter name=^cadastro-feliz- --format 'table {{.Names}}\t{{.State}}\t{{.Status}}\t{{.Ports}}'
 
-logs-shared: env
+logs-shared:
 	$(SHARED) logs --follow
 
 logs-%:
 	$(call require_stack,$*)
 	$(call stack_compose,$*) logs --follow
 
-reset-limits: env
+reset-limits:
 	$(SHARED) exec -T redis-limiter redis-cli FLUSHALL
-
-test-infra:
-	@bash tests/infra/run.sh

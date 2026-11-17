@@ -6,8 +6,8 @@ use Modules\Users\Services\RegistrationKeys;
 use Modules\Users\Services\RegistrationLimiter;
 
 // O limitador sobre um dublê em memória do cliente da conexão `limiter`, com INCRBY, EXPIRE ... NX
-// e TTL em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é provado
-// pelos casos RG de tests/infra/registration.sh.
+// e TTL em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é
+// conferido subindo a stack (decisão 30).
 
 const LIMITER_IP = '203.0.113.10';
 const LIMITER_EMAIL = 'ana@example.com';

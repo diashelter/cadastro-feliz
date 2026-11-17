@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 41,
+  "next_id": 44,
   "lessons": [
     {
       "id": "L-001",
@@ -724,6 +724,60 @@
       ],
       "created": "2026-11-09T06:52:03Z",
       "last_seen": "2026-11-09T06:52:03Z"
+    },
+    {
+      "id": "L-041",
+      "key": "weak_test::uma prova de que o env de um projeto nao chega a outro roda o compose como o makefile o chama mesma pasta mesmas flags e nao de um diretorio escolhido pela prova",
+      "text": "Uma prova de que o .env de um projeto não chega a outro roda o Compose como o Makefile o chama (mesma pasta, mesmas flags), e não de um diretório escolhido pela prova.",
+      "signal": "weak_test",
+      "scope": "compose",
+      "status": "candidate",
+      "features": [
+        "env-per-project"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C5 (compose)"
+      ],
+      "created": "2026-11-17T01:22:17Z",
+      "last_seen": "2026-11-17T01:22:17Z"
+    },
+    {
+      "id": "L-042",
+      "key": "weak_test::quando o criterio fixa uma lista a prova a confere por nome fixo em vez de le la do documento que ela tambem verifica",
+      "text": "Quando o critério fixa uma lista, a prova a confere por nome fixo, em vez de lê-la do documento que ela também verifica.",
+      "signal": "weak_test",
+      "scope": "docs",
+      "status": "candidate",
+      "features": [
+        "env-per-project"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C15 (docs)"
+      ],
+      "created": "2026-11-17T01:22:17Z",
+      "last_seen": "2026-11-17T01:22:17Z"
+    },
+    {
+      "id": "L-043",
+      "key": "weak_test::uma coluna que lista quem declara algo e conferida como igualdade de conjuntos nos dois sentidos e nao so como pertinencia",
+      "text": "Uma coluna que lista quem declara algo é conferida como igualdade de conjuntos, nos dois sentidos, e não só como pertinência.",
+      "signal": "weak_test",
+      "scope": "docs",
+      "status": "candidate",
+      "features": [
+        "env-per-project"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "C16 (docs)"
+      ],
+      "created": "2026-11-17T01:22:17Z",
+      "last_seen": "2026-11-17T01:22:17Z"
     }
   ]
 }

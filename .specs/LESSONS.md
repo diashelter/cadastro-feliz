@@ -254,6 +254,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: tests/infra/laravel.sh LV34 / cc84df5 (tests/infra)
 - last seen: 2026-11-09T06:52:03Z
 
+### L-041 - Uma prova de que o .env de um projeto não chega a outro roda o Compose como o Makefile o chama (mesma pasta, mesmas flags), e não de um diretório escolhido pela prova.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `compose` · harmful: 0
+- features: env-per-project
+- evidence: C5 (compose)
+- last seen: 2026-11-17T01:22:17Z
+
+### L-042 - Quando o critério fixa uma lista, a prova a confere por nome fixo, em vez de lê-la do documento que ela também verifica.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `docs` · harmful: 0
+- features: env-per-project
+- evidence: C15 (docs)
+- last seen: 2026-11-17T01:22:17Z
+
+### L-043 - Uma coluna que lista quem declara algo é conferida como igualdade de conjuntos, nos dois sentidos, e não só como pertinência.
+- signal: `weak_test` · recurrence: 1 feature(s) · scope: `docs` · harmful: 0
+- features: env-per-project
+- evidence: C16 (docs)
+- last seen: 2026-11-17T01:22:17Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

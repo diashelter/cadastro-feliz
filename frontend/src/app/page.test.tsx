@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import Home from "./page";
 
-// O título é montado aqui para que este arquivo não contenha o texto: os testes
-// de tests/infra/frontend.sh trocam o título em page.tsx e esperam que ele suma.
+// O título é montado aqui para que este arquivo não contenha o texto, que fica
+// só em page.tsx.
 const TITLE = ["Cadastro", "Feliz"].join(" ");
 const SRC = join(__dirname, "..");
 

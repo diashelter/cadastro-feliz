@@ -1,6 +1,6 @@
 # Contrato da API
 
-> **Status:** em construção. A stack Laravel implementa `POST /users` e [`GET /health`](#get-health), testados por `make test-laravel` e `make test-infra`, e a stack NestJS também, testados por `make test-nest` e `make test-infra`. Cada `201` grava o usuário e o evento na mesma transação. Go ainda não tem os endpoints. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`. O limitador de cada stack é testado pela suíte dela e pelos casos de `make test-infra`.
+> **Status:** em construção. A stack Laravel implementa `POST /users` e [`GET /health`](#get-health), testados por `make test-laravel`, e a stack NestJS também, testados por `make test-nest`. Cada `201` grava o usuário e o evento na mesma transação. Go ainda não tem os endpoints. O [comportamento do frontend](#comportamento-do-frontend) já está implementado em `frontend/` e é testado por `make test-frontend`. O limitador de cada stack é testado pela suíte dela.
 
 As três stacks expõem exatamente o mesmo contrato em `http://localhost:8080`. O frontend não sabe qual delas está respondendo.
 

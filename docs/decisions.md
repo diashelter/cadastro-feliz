@@ -34,6 +34,9 @@
 | [26](#26-módulo-único-da-stack-laravel) | Módulo único da stack Laravel | Definida |
 | [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |
 | [28](#28-limitador-de-cada-stack-sem-lua) | Limitador de cada stack, sem Lua | Definida |
+| [29](#29-variáveis-de-ambiente-por-projeto-compose) | Variáveis de ambiente por projeto Compose | Definida |
+| [30](#30-só-testes-da-aplicação) | Só testes da aplicação | Definida |
+| [31](#31-env-próprio-em-cada-api) | `.env` próprio em cada API | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -274,6 +277,8 @@ Todo e-mail de boas-vindas sai com o `Message-ID` `<event_id>@cadastro-feliz.loc
 
 ## 23. Suíte de contrato por stack
 
+**Substituída** pela [decisão 30](#30-só-testes-da-aplicação): `tests/infra`, com a suíte de contrato e os adaptadores, foi removido. O texto abaixo registra a decisão como era.
+
 Os casos de `tests/infra` que valem para qualquer stack, em `registration.sh` e `outbox.sh`, são os casos de contrato: só observam a porta 8080, o PostgreSQL, o `redis-limiter` e o Mailpit, e só agem sobre a stack pelo adaptador dela, `tests/infra/adapters/<stack>.sh`. O adaptador define um vocabulário de papéis, como parar o worker, parar o relay, congelar a fila e publicar uma mensagem sem o relay, e não de containers. Os ids não mudam de uma stack para outra; a stack aparece na linha `== <arquivo>:<stack>` antes dos casos. O que é interno de uma stack fica num arquivo dela, como `laravel-outbox.sh`. O detalhamento está no [design](../.design/nestjs-stack.md) e no [plano](../.specs/features/contract-suite/plan.md).
 
 **Motivos**
@@ -382,3 +387,56 @@ O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto.
 **Custos**
 - Um par bloqueado numa stack não fica bloqueado garantidamente na outra.
 - Se o processo cair entre um decremento negativo e a correção, o contador fica em -1 até a janela expirar, o que aceita um cadastro a mais nessa janela.
+
+## 29. Variáveis de ambiente por projeto Compose
+
+**Substituída em parte** pela [decisão 31](#31-env-próprio-em-cada-api): nas APIs, os padrões saem do compose e voltam para um `.env.example` versionado, com `.env` próprio. Para os serviços comuns da raiz, o texto abaixo continua valendo.
+
+Cada projeto Compose (`cadastro-feliz-shared`, `cadastro-feliz-laravel`, `cadastro-feliz-nest`) declara as variáveis de que precisa, com o padrão local escrito no próprio compose: toda interpolação tem a forma `${NOME:-padrão}`, inclusive em `ports` e `command`. O `Makefile` chama o Compose sem `--env-file`, o alvo `make env` e o `.env.example` deixam de existir, e nenhum alvo cria arquivo de ambiente. Para trocar um valor, um `.env` opcional e ignorado pelo git, ao lado do compose, sobrescreve só aquele projeto: o da raiz vale para os serviços comuns, inclusive `NEXT_PUBLIC_API_URL`, e nenhuma variável de stack mora nele. O `.env` de uma stack nunca entra na imagem: `apis/laravel/.dockerignore` o exclui, como os do NestJS e do frontend já faziam. Os padrões das regras de negócio (`REGISTRATION_*` e `OUTBOX_*`) são os de [infrastructure.md](infrastructure.md#regras-de-negócio) em todas as stacks; sobrescrever localmente é livre. O detalhamento está no [design](../.design/env-per-project.md) e no [plano](../.specs/features/env-per-project/plan.md).
+
+**Substitui** o `.env.example` único na raiz (default 2 de [shared-infrastructure](../.design/shared-infrastructure.md)), o `.env` da raiz como única fonte das variáveis da Laravel (Key decision 7 de [laravel-api-base](../.design/laravel-api-base.md)) e, na Key decision 6 de [frontend-container](../.design/frontend-container.md), o `.env` da raiz como única fonte; o frontend continua sem `.env` próprio, e `NEXT_PUBLIC_API_URL` continua lido quando o container inicia.
+
+**Motivos**
+- **Sem `.env` desatualizado:** o `.env` copiado uma vez não recebia as variáveis novas, e uma variável ausente virava vazia em silêncio. Com o padrão no compose, a variável chega com o código.
+- **Cada projeto é dono do que usa:** uma variável nova de uma stack muda só o compose dela, e um valor trocado para um experimento afeta só aquela stack.
+- **O Compose já faz:** ele lê o `.env` da pasta do compose, não o de onde o comando é chamado, e interpola padrões; não há script nem arquivo novo.
+
+**Alternativas descartadas**
+- **Um `.env.example` por projeto, copiado no primeiro uso:** a divergência continuaria, em quatro arquivos.
+- **Um arquivo de padrões por projeto, lido como `env_file`:** dois mecanismos, porque `ports` e `command` ainda precisam de interpolação; só pagaria se as variáveis fossem lidas fora do Compose, e a POC roda só com Docker e `make`.
+
+**Custos**
+- Valores usados por vários projetos (`DB_*`, `CORS_ALLOWED_ORIGIN`, `API_PORT`) se repetem nos composes, e trocar um deles localmente é sobrescrever em cada projeto que o usa.
+- O `.env` antigo e completo de quem já clonou continua na raiz; os serviços comuns só leem dele as próprias variáveis, com os mesmos valores dos padrões, e as stacks não o enxergam.
+
+## 30. Só testes da aplicação
+
+O projeto só tem os testes da aplicação: `make test-frontend`, `make test-laravel` e `make test-nest`, que rodam num container descartável, com dependências simuladas, na máquina e no CI. `tests/infra`, com os testes de infraestrutura, a suíte de contrato, os adaptadores e o alvo `make test-infra`, foi removido, e com ele os scripts de `apis/nestjs/src/scripts`, que só existiam para os adaptadores. Os jobs de infraestrutura saíram do CI. Um compose, uma imagem ou um alvo do `Makefile` com problema aparece ao subir o ambiente, e o fluxo de ponta a ponta é conferido seguindo os [cenários de validação](architecture.md#cenários-para-validar-a-implementação).
+
+**Substitui** a [decisão 23](#23-suíte-de-contrato-por-stack).
+
+**Motivos**
+- **A falha aparece ao subir:** a infraestrutura é local e de uso próprio; quem a sobe vê na hora um serviço que não fica saudável.
+- **Suíte cara e presa a uma plataforma:** os testes destruíam e recriavam o ambiente, levavam um runner por arquivo no CI e só rodavam inteiros em Linux, com bash 5 e as ferramentas do GNU.
+
+**Custos**
+- O que só a suíte de contrato provava fica sem teste automático: o limite e a cota contra o `redis-limiter` real, a cota com requisições paralelas, a entrega do outbox de ponta a ponta, a troca entre stacks com um evento aberto e os comandos de manutenção do outbox contra o PostgreSQL e o Mailpit reais. Esses comportamentos passam a ser conferidos à mão, pelos cenários de validação.
+- Uma stack nova deixa de ser aceita pelos mesmos casos automáticos; as suítes de cada stack cobrem só o que dá para simular.
+
+## 31. `.env` próprio em cada API
+
+Cada API tem um `.env.example` versionado e o próprio `.env`, ignorado pelo git, como num projeto Laravel ou NestJS comum. Um alvo de stack do `Makefile` cria o `.env` a partir do `.env.example` quando ele não existe. Na Laravel, o `.env` entra na imagem e o framework o lê, com o `bootstrap/app.php` na inicialização padrão. Na NestJS, o Compose entrega o `.env` à `api` e ao `worker` por `env_file`, e a aplicação continua lendo as variáveis do processo. O compose de cada stack só interpola `API_PORT`, que vem do mesmo `.env`. Os serviços comuns da raiz continuam com os padrões no compose (decisão 29).
+
+**Substitui**, na [decisão 29](#29-variáveis-de-ambiente-por-projeto-compose), os padrões das APIs escritos no compose, a ausência de `.env.example` e de passo de cópia nas stacks, e o `.env` da Laravel fora da imagem.
+
+**Motivos**
+- **Projeto comum:** quem abre `apis/laravel` ou `apis/nestjs` encontra as variáveis onde espera, no `.env` do projeto.
+- **Inicialização padrão do Laravel:** sem `.env` no container, o Laravel tentava ler o arquivo a cada teste e `make test-laravel` saía com um aviso por teste; o `bootstrap/app.php` precisava de um trecho próprio para desligar essa leitura.
+
+**Alternativas descartadas**
+- **Um `.env` vazio criado no build da imagem:** manteria os padrões no compose, mas o projeto continuaria sem `.env` de verdade.
+- **Manter o trecho que desliga a leitura do `.env`:** sem avisos, mas com o `bootstrap/app.php` fora do padrão.
+
+**Custos**
+- O `.env` criado uma vez não recebe as variáveis que entrarem depois no `.env.example`. Na Laravel, `config/*.php` tem o padrão de cada variável; na NestJS, uma variável ausente faz a aplicação falhar com `missing environment variable` quando ela é lida.
+- Na Laravel, trocar um valor exige `make up-laravel`, que reconstrói a imagem.
