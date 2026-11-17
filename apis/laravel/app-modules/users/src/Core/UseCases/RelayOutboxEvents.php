@@ -1,12 +1,12 @@
 <?php
 
-namespace Modules\Users\UseCases;
+namespace Modules\Users\Core\UseCases;
 
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\DB;
-use Modules\Users\Enums\OutboxEventType;
+use Modules\Users\Core\Enums\OutboxEventType;
 use Modules\Users\Jobs\SendWelcomeEmailJob;
-use Modules\Users\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 use ValueError;
 
 /**

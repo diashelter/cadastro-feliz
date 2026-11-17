@@ -4,7 +4,7 @@ namespace Modules\Users\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\UseCases\RelayOutboxEvents;
+use Modules\Users\Core\UseCases\RelayOutboxEvents;
 use Throwable;
 
 /** O relay: agendado a cada segundo, só publica; o envio fica com quem consome o evento. */

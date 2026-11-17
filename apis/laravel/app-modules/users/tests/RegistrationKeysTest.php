@@ -1,6 +1,6 @@
 <?php
 
-use Modules\Users\Services\RegistrationKeys;
+use Modules\Users\Core\Services\RegistrationKeys;
 
 const ATTEMPT_KEY = 'registration:attempts:da657b591c8d33639918ea46be3b50e2bb1173313d08cf019556c130426a63a8';
 const QUOTA_KEY = 'registration:ip:631f08140b24b7274d12df3c37a1a80ce5876dafd7007d772e0114fddf88b682';

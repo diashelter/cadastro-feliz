@@ -17,7 +17,7 @@ function modulePhpFiles(string $glob): array
 }
 
 it('keeps status and event literals inside the enums', function () {
-    $enums = ['users/src/Enums/OutboxStatus.php', 'users/src/Enums/OutboxEventType.php'];
+    $enums = ['users/src/Core/Enums/OutboxStatus.php', 'users/src/Core/Enums/OutboxEventType.php'];
     $found = [];
     foreach (modulePhpFiles('*/src') as $path => $code) {
         if (in_array($path, $enums, true)) {
@@ -35,17 +35,17 @@ it('keeps status and event literals inside the enums', function () {
 });
 
 it('opens no transaction in repositories', function () {
-    $repositories = modulePhpFiles('*/src/Repositories');
+    $repositories = modulePhpFiles('*/src/Persistence/Repositories');
     $found = array_keys(array_filter($repositories, fn (string $code) => preg_match('/transaction\(|beginTransaction/', $code)));
 
-    expect($repositories)->toHaveKeys(['users/src/Repositories/OutboxRepository.php', 'users/src/Repositories/UserRepository.php'])
+    expect($repositories)->toHaveKeys(['users/src/Persistence/Repositories/OutboxRepository.php', 'users/src/Persistence/Repositories/UserRepository.php'])
         ->and($found)->toBe([]);
 });
 
 it('has no actions', function () {
     expect(glob(base_path('app-modules/*/src/Actions')))->toBe([])
         ->and(array_keys(array_filter(modulePhpFiles('*'), fn (string $code) => str_contains($code, 'RegisterUserAction'))))->toBe([])
-        ->and(class_exists(Modules\Users\UseCases\RegisterUser::class))->toBeTrue();
+        ->and(class_exists(Modules\Users\Core\UseCases\RegisterUser::class))->toBeTrue();
 });
 
 it('has a single users module', function () {
@@ -85,8 +85,8 @@ it('references no notifications module', function () {
 
 it('keeps the welcome email in users', function () {
     $gone = [
-        'Modules\\Users\\Services\\OutboxConsumers',
-        'Modules\\Users\\Exceptions\\UnknownOutboxConsumer',
+        'Modules\\Users\\Core\\Services\\OutboxConsumers',
+        'Modules\\Users\\Core\\Exceptions\\UnknownOutboxConsumer',
         'Modules\\'.'Notifications\\Providers\\NotificationsServiceProvider',
     ];
     $files = [];
@@ -98,7 +98,7 @@ it('keeps the welcome email in users', function () {
 
     expect(class_exists(Modules\Users\Jobs\SendWelcomeEmailJob::class))->toBeTrue()
         ->and(class_exists(Modules\Users\Mail\WelcomeMail::class))->toBeTrue()
-        ->and(class_exists(Modules\Users\UseCases\SendWelcomeEmail::class))->toBeTrue()
+        ->and(class_exists(Modules\Users\Core\UseCases\SendWelcomeEmail::class))->toBeTrue()
         ->and(array_filter($gone, 'class_exists'))->toBe([])
         ->and($files)->toContain('WelcomeMail.php')
         ->and(array_values(array_intersect(['OutboxConsumers.php', 'UnknownOutboxConsumer.php', 'NotificationsServiceProvider.php'], $files)))->toBe([]);
@@ -117,7 +117,7 @@ it('injects no database connection', function () {
         Illuminate\Database\DatabaseManager::class,
     ];
     $injected = [];
-    foreach ([Modules\Users\UseCases\RegisterUser::class, Modules\Users\UseCases\RelayOutboxEvents::class] as $class) {
+    foreach ([Modules\Users\Core\UseCases\RegisterUser::class, Modules\Users\Core\UseCases\RelayOutboxEvents::class] as $class) {
         foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $param) {
             $type = (string) $param->getType();
             foreach ($database as $db) {
@@ -128,7 +128,23 @@ it('injects no database connection', function () {
         }
     }
 
-    expect($files)->toHaveKey('users/src/UseCases/RegisterUser.php')
+    expect($files)->toHaveKey('users/src/Core/UseCases/RegisterUser.php')
         ->and($found)->toBe([])
         ->and($injected)->toBe([]);
+});
+
+it('splits users into core, persistence and http layers', function () {
+    $src = base_path('app-modules/users/src');
+    $old = ['Enums', 'Exceptions', 'UseCases', 'Services', 'Models', 'Repositories'];
+
+    expect(array_map(fn (string $dir) => is_dir("{$src}/{$dir}"), [
+        'Core/Enums', 'Core/Exceptions', 'Core/UseCases', 'Core/Services',
+        'Persistence/Models', 'Persistence/Repositories',
+        'Http/Controllers', 'Http/Requests',
+    ]))->each->toBeTrue()
+        ->and(array_values(array_filter($old, fn (string $dir) => is_dir("{$src}/{$dir}"))))->toBe([])
+        ->and(is_file("{$src}/Http/routes.php"))->toBeTrue()
+        ->and(is_dir(base_path('app-modules/users/routes')))->toBeFalse()
+        ->and(app('router')->getRoutes()->match(Illuminate\Http\Request::create('/users', 'POST'))->getActionName())
+        ->toBe(Modules\Users\Http\Controllers\UserController::class.'@store');
 });

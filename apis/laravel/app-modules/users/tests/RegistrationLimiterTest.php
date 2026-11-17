@@ -1,9 +1,9 @@
 <?php
 
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
-use Modules\Users\Exceptions\RegistrationLimited;
-use Modules\Users\Services\RegistrationKeys;
-use Modules\Users\Services\RegistrationLimiter;
+use Modules\Users\Core\Exceptions\RegistrationLimited;
+use Modules\Users\Core\Services\RegistrationKeys;
+use Modules\Users\Core\Services\RegistrationLimiter;
 
 // O limitador sobre um dublê em memória do cliente da conexão `limiter`, com INCRBY, EXPIRE ... NX
 // e TTL em MULTI ... EXEC e o relógio do teste. O comportamento contra o redis-limiter real é

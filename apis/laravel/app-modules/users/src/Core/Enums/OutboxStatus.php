@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Users\Enums;
+namespace Modules\Users\Core\Enums;
 
 /**
  * O status de uma linha de users_outbox. Os valores são os do CHECK users_outbox_status_valid,

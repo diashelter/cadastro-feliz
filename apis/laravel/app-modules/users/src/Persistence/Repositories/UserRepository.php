@@ -1,11 +1,11 @@
 <?php
 
-namespace Modules\Users\Repositories;
+namespace Modules\Users\Persistence\Repositories;
 
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
-use Modules\Users\Exceptions\EmailAlreadyTaken;
-use Modules\Users\Models\User;
+use Modules\Users\Core\Exceptions\EmailAlreadyTaken;
+use Modules\Users\Persistence\Models\User;
 
 class UserRepository
 {

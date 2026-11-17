@@ -2,10 +2,10 @@
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Modules\Users\Core\UseCases\NotifyFailedOutboxEvents;
+use Modules\Users\Core\UseCases\PurgeProcessedOutboxEvents;
 use Modules\Users\Mail\FailedEventsDigestMail;
-use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\UseCases\NotifyFailedOutboxEvents;
-use Modules\Users\UseCases\PurgeProcessedOutboxEvents;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 
 /** Uma linha de unnotifiedFailures. */
 function failedEvent(string $id, string $email, int $attempts = 5, ?string $error = 'Connection refused'): object

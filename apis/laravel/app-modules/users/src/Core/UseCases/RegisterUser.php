@@ -1,20 +1,22 @@
 <?php
 
-namespace Modules\Users\UseCases;
+namespace Modules\Users\Core\UseCases;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\Exceptions\EmailAlreadyTaken;
-use Modules\Users\Exceptions\RegistrationLimited;
-use Modules\Users\Models\User;
-use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\Repositories\UserRepository;
-use Modules\Users\Services\RegistrationLimiter;
+use Modules\Users\Core\Dtos\RegisterUserDto;
+use Modules\Users\Core\Exceptions\EmailAlreadyTaken;
+use Modules\Users\Core\Exceptions\RegistrationLimited;
+use Modules\Users\Core\Services\RegistrationLimiter;
+use Modules\Users\Persistence\Models\User;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\UserRepository;
 use Throwable;
 
 /**
- * POST /users, na ordem do contrato. Usuário e evento são gravados na mesma transação, ou
- * nenhum dos dois (decisão 1). Este caminho não toca na fila: quem publica é o relay.
+ * POST /users, na ordem do contrato, a partir dos dados já normalizados pelo StoreUserRequest.
+ * Usuário e evento são gravados na mesma transação, ou nenhum dos dois (decisão 1). Este
+ * caminho não toca na fila: quem publica é o relay.
  */
 class RegisterUser
 {
@@ -28,16 +30,14 @@ class RegisterUser
      * @throws RegistrationLimited
      * @throws EmailAlreadyTaken
      */
-    public function execute(string $name, string $email, string $ip): User
+    public function execute(RegisterUserDto $data, string $ip): User
     {
-        $email = mb_strtolower(trim($email));
-
-        $this->limiter->countAttempt($ip, $email);
+        $this->limiter->countAttempt($ip, $data->email);
         $this->limiter->reserveQuota($ip);
 
         try {
-            return DB::transaction(function () use ($name, $email) {
-                $user = $this->users->create(trim($name), $email);
+            return DB::transaction(function () use ($data) {
+                $user = $this->users->create($data->name, $data->email);
 
                 $this->outbox->recordUserRegistered(
                     $user->id,

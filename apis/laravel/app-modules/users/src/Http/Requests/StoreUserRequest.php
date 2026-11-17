@@ -5,6 +5,7 @@ namespace Modules\Users\Http\Requests;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Modules\Users\Core\Dtos\RegisterUserDto;
 
 /**
  * Regras e forma do 422 do contrato. O formato de validação do framework não serve
@@ -45,6 +46,18 @@ class StoreUserRequest extends FormRequest
             // `max` antes de `email`: um e-mail longo responde too_long, não invalid_format.
             'email' => ['bail', 'required', 'string', 'max:254', 'email'],
         ];
+    }
+
+    /**
+     * Os dados validados, normalizados para o caso de uso. A normalização vem depois da
+     * validação, na ordem do contrato; o trim antes dela é do middleware TrimStrings.
+     */
+    public function toDto(): RegisterUserDto
+    {
+        return new RegisterUserDto(
+            name: trim($this->validated('name')),
+            email: mb_strtolower(trim($this->validated('email'))),
+        );
     }
 
     /** @return array{field: string, code: string, message: string} */

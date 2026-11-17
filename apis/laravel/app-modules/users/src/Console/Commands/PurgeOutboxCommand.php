@@ -4,7 +4,7 @@ namespace Modules\Users\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Modules\Users\UseCases\PurgeProcessedOutboxEvents;
+use Modules\Users\Core\UseCases\PurgeProcessedOutboxEvents;
 use Throwable;
 
 /** Agendado uma vez por dia; também pode ser rodado à mão. */

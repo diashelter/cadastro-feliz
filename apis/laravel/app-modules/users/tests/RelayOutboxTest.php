@@ -3,9 +3,9 @@
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Modules\Users\Core\UseCases\RelayOutboxEvents;
 use Modules\Users\Jobs\SendWelcomeEmailJob;
-use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\UseCases\RelayOutboxEvents;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 
 /** DB::transaction registra o início e o fim em $log e executa o callback. */
 function relayTransaction(array &$log): void

@@ -2,16 +2,16 @@
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Modules\Users\Core\UseCases\SendWelcomeEmail;
 use Modules\Users\Jobs\SendWelcomeEmailJob;
 use Modules\Users\Mail\WelcomeMail;
-use Modules\Users\Repositories\OutboxRepository;
-use Modules\Users\UseCases\SendWelcomeEmail;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 
 const WELCOME_EVENT_ID = '0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e';
 
-function welcomeEvent(string $status): Modules\Users\Models\UserOutboxEvent
+function welcomeEvent(string $status): Modules\Users\Persistence\Models\UserOutboxEvent
 {
-    return (new Modules\Users\Models\UserOutboxEvent)->newFromBuilder((object) [
+    return (new Modules\Users\Persistence\Models\UserOutboxEvent)->newFromBuilder((object) [
         'id' => WELCOME_EVENT_ID,
         'event_type' => 'user.registered',
         'payload' => json_encode(['user_id' => 'u1', 'name' => 'Ana Souza', 'email' => 'ana@example.com', 'occurred_at' => '2026-11-04T12:00:00Z']),

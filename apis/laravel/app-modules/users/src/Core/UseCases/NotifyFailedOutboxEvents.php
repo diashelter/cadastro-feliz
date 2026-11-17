@@ -1,10 +1,10 @@
 <?php
 
-namespace Modules\Users\UseCases;
+namespace Modules\Users\Core\UseCases;
 
 use Illuminate\Support\Facades\Mail;
 use Modules\Users\Mail\FailedEventsDigestMail;
-use Modules\Users\Repositories\OutboxRepository;
+use Modules\Users\Persistence\Repositories\OutboxRepository;
 
 /**
  * Manda ao operador um resumo dos eventos failed ainda não avisados e só depois os marca. Sem
