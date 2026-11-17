@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Modules\Users\Core\Dtos\RegisterUserDto;
 use Modules\Users\Core\Services\RegistrationLimiter;
 use Modules\Users\Core\UseCases\RegisterUser;
 use Modules\Users\Persistence\Models\User;
@@ -56,7 +57,7 @@ it('writes the user and the event inside one transaction', function () {
 
     recordTransaction($log);
     $user = (new RegisterUser(quietLimiter(), $users, $outbox))
-        ->execute('  Ana Souza ', ' ANA@Example.com ', '10.0.0.1');
+        ->execute(new RegisterUserDto('Ana Souza', 'ana@example.com'), '10.0.0.1');
 
     expect($log)->toBe(['begin', 'users', 'users_outbox', 'commit'])
         ->and($user->id)->toBe('0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e');
@@ -71,7 +72,7 @@ it('writes nothing when the transaction does not run', function () {
 
     recordTransaction($log, runs: false);
     (new RegisterUser(quietLimiter(), $users, $outbox))
-        ->execute('Ana Souza', 'ana@example.com', '10.0.0.1');
+        ->execute(new RegisterUserDto('Ana Souza', 'ana@example.com'), '10.0.0.1');
 
     expect($log)->toBe(['begin', 'commit']);
 });
@@ -95,7 +96,7 @@ it('rethrows an event failure and releases the quota once', function () {
     $outbox = Mockery::mock(OutboxRepository::class);
     $outbox->shouldReceive('recordUserRegistered')->once()->andThrow($failure);
 
-    expect(fn () => (new RegisterUser($limiter, $users, $outbox))->execute('Ana Souza', 'ana@example.com', '10.0.0.1'))
+    expect(fn () => (new RegisterUser($limiter, $users, $outbox))->execute(new RegisterUserDto('Ana Souza', 'ana@example.com'), '10.0.0.1'))
         ->toThrow(RuntimeException::class, 'outbox insert failed');
     expect($escaped)->toBe($failure);
 });

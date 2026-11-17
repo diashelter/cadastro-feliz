@@ -28,7 +28,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 
 - **Módulos:** cada módulo é um pacote `modules/<nome>` em `app-modules`, carregado pelo `internachi/modular`, com o namespace `Modules\`. Nenhum módulo tem migrations (decisão 2).
 - **Contexto:** `users` é o cadastro e é dono de `users_outbox`: grava o evento, roda o relay, envia o e-mail de boas-vindas e é o único que escreve na tabela. Não há módulo `notifications` (decisão 26).
-- **Camadas de `users`:** `src/Core` é o núcleo do que o sistema faz, com enums, exceções, casos de uso e serviços; `src/Persistence` guarda os models e os repositórios; `src/Http` guarda controllers, requests e as rotas, carregadas pelo `RouteServiceProvider` do módulo. Comandos, job e e-mails ficam em `src/Console`, `src/Jobs` e `src/Mail`.
+- **Camadas de `users`:** `src/Core` é o núcleo do que o sistema faz, com enums, exceções, casos de uso e serviços; `src/Persistence` guarda os models e os repositórios; `src/Http` guarda controllers, requests, resources, respostas e as rotas, carregadas pelo `RouteServiceProvider` do módulo. O `StoreUserRequest` valida, responde o 422, normaliza o e-mail e entrega ao caso de uso um `RegisterUserDto`; o controller só chama o caso de uso e escolhe a resposta em `RegistrationResponses`. Comandos, job e e-mails ficam em `src/Console`, `src/Jobs` e `src/Mail`.
 - **Casos de uso:** cada operação é uma classe em `src/Core/UseCases`, com um método `execute`, que abre a própria transação com `DB::transaction`; os repositórios só executam consultas. Status e tipos de evento ficam nos enums de `src/Core/Enums`.
 
 - **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição, e reinicia o `horizon`, porque um worker de longa duração não recarrega o código. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
@@ -75,6 +75,7 @@ apis/laravel/
         ├── src/Console/Commands/PurgeOutboxCommand.php
         ├── src/Console/Commands/NotifyFailedOutboxEventsCommand.php
         ├── src/Core/         # o núcleo: o que o sistema faz
+        │   ├── Dtos/         # RegisterUserDto, a entrada de RegisterUser
         │   ├── Enums/        # OutboxStatus e OutboxEventType
         │   ├── Exceptions/   # EmailAlreadyTaken e RegistrationLimited
         │   ├── Services/     # RegistrationLimiter, RegistrationKeys e RetryPolicy
@@ -82,7 +83,9 @@ apis/laravel/
         │                     # PurgeProcessedOutboxEvents e NotifyFailedOutboxEvents
         ├── src/Http/         # a parte de rede
         │   ├── Controllers/UserController.php
-        │   ├── Requests/StoreUserRequest.php
+        │   ├── Requests/StoreUserRequest.php   # 422, normalização e toDto()
+        │   ├── Resources/UserResource.php
+        │   ├── Responses/RegistrationResponses.php # 201, 409, 429 e 500
         │   ├── RouteServiceProvider.php
         │   └── routes.php
         ├── src/Jobs/SendWelcomeEmailJob.php

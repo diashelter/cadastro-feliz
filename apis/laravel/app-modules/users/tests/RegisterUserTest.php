@@ -3,6 +3,7 @@
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Modules\Users\Core\Dtos\RegisterUserDto;
 use Modules\Users\Core\Exceptions\EmailAlreadyTaken;
 use Modules\Users\Core\Exceptions\RegistrationLimited;
 use Modules\Users\Core\Services\RegistrationLimiter;
@@ -133,11 +134,12 @@ it('answers 500 without internal detail when the database fails', function () {
     expect($response->getContent())->toBe('{"message":"Internal server error.","errors":[]}');
 });
 
-it('answers 201 through the register user use case', function () {
+it('answers 201 through the register user use case with the normalized dto', function () {
     $this->mock(RegisterUser::class)->shouldReceive('execute')->once()
-        ->with('Ana Souza', 'ana@example.com', '127.0.0.1')->andReturn(fakeUser());
+        ->with(Mockery::on(fn ($data) => $data == new RegisterUserDto('Ana Souza', 'ana@example.com')), '127.0.0.1')
+        ->andReturn(fakeUser());
 
-    $response = $this->postJson('/users', ['name' => 'Ana Souza', 'email' => 'ana@example.com']);
+    $response = $this->postJson('/users', ['name' => '  Ana Souza ', 'email' => ' ANA@Example.com ']);
 
     $response->assertStatus(201);
     expect($response->json('data.id'))->toBe('0190f3a2-7c1e-7b3a-9d5e-2f4a6b8c0d1e');

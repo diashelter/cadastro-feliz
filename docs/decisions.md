@@ -443,7 +443,7 @@ Cada API tem um `.env.example` versionado e o próprio `.env`, ignorado pelo git
 
 ## 32. Camadas Core, Persistence e Http no módulo `users`
 
-O módulo `users` da stack Laravel separa o código em três pastas de `src`: `Core`, com enums, exceções, casos de uso e serviços, o núcleo do que o sistema faz; `Persistence`, com os models e os repositórios; e `Http`, com controllers, requests e as rotas. Os namespaces seguem as pastas, como `Modules\Users\Core\UseCases\RegisterUser`. Comandos, job e e-mails continuam em `src/Console`, `src/Jobs` e `src/Mail`.
+O módulo `users` da stack Laravel separa o código em três pastas de `src`: `Core`, com enums, exceções, casos de uso e serviços, o núcleo do que o sistema faz; `Persistence`, com os models e os repositórios; e `Http`, com controllers, requests e as rotas. Os namespaces seguem as pastas, como `Modules\Users\Core\UseCases\RegisterUser`. Na camada Http, o `StoreUserRequest` valida, responde o 422 e normaliza os dados, que entrega a `RegisterUser` num `RegisterUserDto`; o controller traduz as exceções do caso de uso pela classe `RegistrationResponses`. Comandos, job e e-mails continuam em `src/Console`, `src/Jobs` e `src/Mail`.
 
 **Substitui**, na [decisão 26](#26-módulo-único-da-stack-laravel), os casos de uso em `src/UseCases`, que passam a `src/Core/UseCases`, e as rotas em `routes/users-routes.php`, que passam a `src/Http/routes.php`.
 
