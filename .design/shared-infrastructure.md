@@ -80,7 +80,7 @@ Serviços: `postgres` (volume nomeado, porta 5432), `redis-limiter` (`maxmemory 
 Alternatives considered: Valkey no lugar do Redis ganha se a licença do Redis 8 for um problema, o que não acontece em uma POC local.
 
 1. Porta do PostgreSQL publicada fixa em 5432, como na documentação. Default: sem variável para trocar; uma variável entra se alguém tiver PostgreSQL local em conflito.
-2. `.env.example` com todas as variáveis de docs/infrastructure.md, inclusive as de stack. Default: um único arquivo na raiz, que os composes das stacks também leem.
+2. `.env.example` com todas as variáveis de docs/infrastructure.md, inclusive as de stack. Default: um único arquivo na raiz, que os composes das stacks também leem. *Substituída pela decisão 29 de docs/decisions.md: cada projeto Compose declara as próprias variáveis, com padrões no compose, e um `.env` opcional ao lado do compose sobrescreve só aquele projeto.*
 
 ### migrate
 

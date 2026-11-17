@@ -219,7 +219,6 @@ make test-infra
 cadastro-feliz/
 ├── README.md
 ├── Makefile
-├── .env.example
 ├── docker-compose.yml        # serviços compartilhados
 ├── .github/workflows/        # CI: make test-frontend, make test-laravel, make test-nest e tests/infra
 ├── database/migrations/      # schema canônico em SQL

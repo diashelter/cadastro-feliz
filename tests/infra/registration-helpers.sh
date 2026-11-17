@@ -78,15 +78,15 @@ ob_seed() {
     select id from e"
 }
 
-# Troca valores no .env da cópia de trabalho e recria a stack, com o que depende deles. Sem
-# `sed -i`, que no macOS espera um sufixo e deixaria o .env como estava.
+# Troca valores no .env da stack, na cópia de trabalho, e recria a stack, com o que depende
+# deles. Só a stack em teste lê esse arquivo (decisão 29).
 rg_set_env() {
-  local pair
-  for pair in "$@"; do
-    sed "s|^${pair%%=*}=.*|$pair|" "$WORK/.env" > "$WORK/.env.new" && mv "$WORK/.env.new" "$WORK/.env" || return 1
-  done
+  env_set "$STACK_DIR" "$@" || return 1
   mkq "up-$SUITE_STACK"
 }
+
+# A origem liberada pelo CORS, como o Compose a entrega à API da stack.
+rg_origin() { compose_env "$STACK_DIR/docker-compose.yml" "$STACK_ENV_SERVICE" CORS_ALLOWED_ORIGIN; }
 rg_default_env() {
   rg_set_env OUTBOX_MAX_ATTEMPTS=5 OUTBOX_BACKOFF_BASE_SECONDS=30 OUTBOX_REPUBLISH_AFTER_SECONDS=300 OUTBOX_BATCH_SIZE=100
 }

@@ -86,13 +86,13 @@ t_fe4_api_url() {
   local img_before img_after ok=0
   mkq up-shared || return 1
   img_before="$(fe_image)"
-  sed -i 's#^NEXT_PUBLIC_API_URL=.*#NEXT_PUBLIC_API_URL=http://localhost:9090#' "$WORK/.env"
+  env_set . NEXT_PUBLIC_API_URL=http://localhost:9090
   mkq up-shared || { note "make up-shared saiu com erro"; ok=1; }
   img_after="$(fe_image)"
   page_has / 'localhost:9090' || { note "sem localhost:9090"; ok=1; }
   page_has / 'localhost:8080' && { note "ainda mostra localhost:8080"; ok=1; }
   [ "$img_before" = "$img_after" ] || { note "a imagem foi reconstruída"; ok=1; }
-  cp "$WORK/.env.example" "$WORK/.env"
+  rm -f "$WORK/.env"
   return $ok
 }
 check "FE4 api url read at start" t_fe4_api_url
@@ -163,7 +163,7 @@ t_fe13_watch_start() {
   sed -i 's/Cadastro Feliz/Cadastro Watch/' "$page_file"
   start_watch
   wait_for 300 watch_ready || { note "watch não ficou pronto: $(tail -5 "$WORK/watch.log")"; return 1; }
-  [ -f "$WORK/.env" ] || { note ".env ausente"; ok=1; }
+  [ -z "$(env_files)" ] || { note "make criou: $(env_files)"; ok=1; }
   network_exists || { note "rede ausente"; ok=1; }
   fe_healthy || { note "frontend: $(health "$FE")"; ok=1; }
   page_has / 'Cadastro Watch' || { note "sem a edição"; ok=1; }

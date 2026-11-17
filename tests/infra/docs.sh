@@ -208,17 +208,15 @@ t_ip12_limitations() {
 check "IP12 limitations describe ip quota" t_ip12_limitations
 
 t_ip13_env() {
-  local block rules ok=0 pair
-  block="$(awk '/^# Regras de negócio$/{on=1; next} on && (/^$/ || /^#/){exit} on' "$WORK/.env.example")"
+  local rules ok=0 pair
   rules="$(awk '/^### Regras de negócio$/{on=1; next} on && /^##/{exit} on' "$WORK/docs/infrastructure.md")"
   for pair in REGISTRATION_MAX_PER_IP=20 REGISTRATION_IP_WINDOW_SECONDS=3600; do
-    grep -qxF "$pair" <<< "$block" || { note ".env.example › Regras de negócio sem $pair"; ok=1; }
     grep -qF "| \`${pair%%=*}\` | \`${pair#*=}\` |" <<< "$rules" \
       || { note "infrastructure.md › Regras de negócio sem $pair"; ok=1; }
   done
   return $ok
 }
-check "IP13 env vars documented and exemplified" t_ip13_env
+check "IP13 env vars documented" t_ip13_env
 
 t_ip14_scenarios() {
   local body s12 s13 numbers ok=0
@@ -718,3 +716,123 @@ t_om22_readme_infra() {
   return $ok
 }
 check "OM22 readme and infrastructure docs describe the notice" t_om22_readme_infra
+
+# --- Variáveis de ambiente por projeto (decisão 29); plano em .specs/features/env-per-project ---
+
+# As linhas "<VARIÁVEL>=<padrão>" de docs/infrastructure.md › Regras de negócio.
+ev_doc_rules() {
+  awk '/^### Regras de negócio$/{on=1; next} on && /^##/{exit} on' "$WORK/docs/infrastructure.md" \
+    | sed -nE 's/^\| `([A-Z_]+)` \| `([^`]*)` \|.*/\1=\2/p'
+}
+
+# ev_rules_diverging <compose>: "<projeto> <VARIÁVEL> <motivo>" para cada regra de negócio cujo
+# padrão no compose difere do da documentação, e para as obrigatórias que o compose não declara.
+# OUTBOX_RETENTION_DAYS e OUTBOX_ALERT_EMAIL são só da Laravel e podem faltar.
+ev_rules_diverging() {
+  local c="$1" project defaults name docv val
+  project="$(compose_name "$c")"
+  defaults="$(compose_defaults "$c")"
+  while IFS='=' read -r name docv; do
+    [ -n "$name" ] || continue
+    val="$(grep -E "^$name=" <<< "$defaults" | cut -d= -f2-)"
+    if [ -z "$val" ]; then
+      case "$name" in OUTBOX_RETENTION_DAYS|OUTBOX_ALERT_EMAIL) ;; *) echo "$project $name ausente" ;; esac
+    elif [ "$val" != "$docv" ]; then
+      echo "$project $name $val, na doc $docv"
+    fi
+  done <<< "$(ev_doc_rules)"
+}
+
+t_ev11_rules_follow_docs() {
+  local ok=0 c out f="$WORK/apis/laravel/docker-compose.yml" saved="$WORK/ev11.yml"
+  [ "$(ev_doc_rules | grep -c .)" = 10 ] || { note "Regras de negócio com $(ev_doc_rules | grep -c .) variáveis, esperadas 10"; ok=1; }
+  for c in apis/laravel/docker-compose.yml apis/nestjs/docker-compose.yml; do
+    out="$(ev_rules_diverging "$c")"
+    [ -z "$out" ] || { note "$out"; ok=1; }
+  done
+  cp "$f" "$saved"
+  sed 's/REGISTRATION_MAX_ATTEMPTS:-5}/REGISTRATION_MAX_ATTEMPTS:-6}/' "$saved" > "$f"
+  out="$(ev_rules_diverging apis/laravel/docker-compose.yml)"
+  grep -qF 'cadastro-feliz-laravel REGISTRATION_MAX_ATTEMPTS' <<< "$out" || { note "o padrão 6 passou: '$out'"; ok=1; }
+  cp "$saved" "$f" && rm -f "$saved"
+  return $ok
+}
+check "EV11 stack business rule defaults follow the docs" t_ev11_rules_follow_docs
+
+# As linhas de docs/infrastructure.md › Variáveis de ambiente, como "<VARIÁVEL>|<padrão>|<projetos>":
+# o padrão só quando a célula é um literal único; os projetos em ordem, separados por vírgula.
+ev_doc_vars() {
+  awk '/^## Variáveis de ambiente/{on=1; next} on && /^## /{exit} on' "$1" \
+    | grep -E '^\| `[A-Z_]+` \|' \
+    | while IFS='|' read -r _ name default projects _; do
+        name="$(tr -d ' `' <<< "$name")"
+        default="$(sed -nE 's/^ *`([^`]*)` *$/\1/p' <<< "$default")"
+        projects="$(grep -oE '`(shared|laravel|nest|go)`' <<< "$projects" | tr -d '`' | sort | paste -sd, -)"
+        echo "$name|$default|$projects"
+      done
+}
+
+# As variáveis dos composes, no mesmo formato, com os projetos que declaram cada uma.
+ev_compose_vars() {
+  local c project
+  for c in "${COMPOSES[@]}"; do
+    project="$(compose_name "$c")"; project="${project#cadastro-feliz-}"
+    compose_defaults "$c" | sed "s/\$/|$project/"
+  done | awk -F'|' '{split($1, kv, "="); n=kv[1]; d=substr($1, length(n) + 2)
+      if (n in def && def[n] != d) def[n] = def[n] " <> " d; else def[n] = d
+      p[n] = (n in p) ? p[n] "," $2 : $2}
+    END {for (n in def) print n "|" def[n] "|" p[n]}' \
+    | while IFS='|' read -r n d p; do echo "$n|$d|$(tr , '\n' <<< "$p" | sort | paste -sd, -)"; done | sort
+}
+
+# ev_docs_diverging <documento>: uma linha por diferença entre a documentação e os composes.
+ev_docs_diverging() {
+  local docs composes n d p dd dp
+  docs="$(ev_doc_vars "$1")"
+  composes="$(ev_compose_vars)"
+  while IFS='|' read -r n d p; do
+    [ -n "$n" ] || continue
+    [ "$(grep -c "^$n|" <<< "$docs")" = 1 ] || { echo "$n: $(grep -c "^$n|" <<< "$docs") linhas na doc"; continue; }
+    IFS='|' read -r _ dd dp <<< "$(grep "^$n|" <<< "$docs")"
+    [ -z "$dd" ] || [ "$dd" = "$d" ] || echo "$n: padrão $d nos composes, $dd na doc"
+    [ "$dp" = "$p" ] || echo "$n: projetos $p nos composes, $dp na doc"
+  done <<< "$composes"
+  while IFS='|' read -r n d p; do
+    [ -n "$n" ] && [ "$p" != go ] || continue
+    grep -q "^$n|" <<< "$composes" || echo "$n: na doc, em nenhum compose"
+  done <<< "$docs"
+}
+
+t_ev12_docs_list_compose_vars() {
+  local ok=0 out f="$WORK/docs/infrastructure.md" mutated="$WORK/ev12.md"
+  out="$(ev_docs_diverging "$f")"
+  [ -z "$out" ] || { note "$out"; ok=1; }
+  [ "$(ev_doc_vars "$f" | grep '^DB_PASSWORD|')" = 'DB_PASSWORD|cadastro_feliz|laravel,nest,shared' ] \
+    || { note "DB_PASSWORD: $(ev_doc_vars "$f" | grep '^DB_PASSWORD|')"; ok=1; }
+  [ "$(ev_doc_vars "$f" | grep '^RABBITMQ_URL|' | cut -d'|' -f3)" = go ] || { note "RABBITMQ_URL sem go"; ok=1; }
+  sed 's/^| `DB_PASSWORD` | `cadastro_feliz` |/| `DB_PASSWORD` | `outra` |/' "$f" > "$mutated"
+  ev_docs_diverging "$mutated" | grep -qF 'DB_PASSWORD: padrão cadastro_feliz nos composes, outra na doc' \
+    || { note "o padrão divergente passou: $(ev_docs_diverging "$mutated")"; ok=1; }
+  rm -f "$mutated"
+  return $ok
+}
+check "EV12 docs list every compose variable with its default" t_ev12_docs_list_compose_vars
+
+t_ev13_decision_29() {
+  local ok=0 f="$WORK/docs/decisions.md" body d hits term
+  grep -qE '^\| \[29\]\(#29-[^)]*\) \| [^|]+ \| Definida \|$' "$f" || { note "índice sem a decisão 29 Definida"; ok=1; }
+  body="$(section "$f" '29\. ')"
+  [ -n "$body" ] || { note "seção 29 ausente"; return 1; }
+  for term in '.env.example' 'make env' '--env-file' 'padrão' 'Substitui' 'shared-infrastructure' 'frontend-container' 'laravel-api-base' '.dockerignore'; do
+    grep -qF -- "$term" <<< "$body" || { note "decisão 29 sem '$term'"; ok=1; }
+  done
+  for d in shared-infrastructure frontend-container laravel-api-base; do
+    grep -qF 'decisão 29' "$WORK/.design/$d.md" || { note ".design/$d.md sem nota da decisão 29"; ok=1; }
+  done
+  for d in docs/infrastructure.md docs/stacks.md README.md; do
+    hits="$(grep -nE '\.env\.example|única fonte|vêm do `\.env` da raiz|só do `\.env` da raiz|Cria `\.env`' "$WORK/$d")"
+    [ -z "$hits" ] || { note "$d: $hits"; ok=1; }
+  done
+  return $ok
+}
+check "EV13 decision 29 recorded and root env no longer the source" t_ev13_decision_29

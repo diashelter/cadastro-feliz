@@ -33,7 +33,7 @@ O mesmo caso de uso é construído três vezes, com o mesmo [contrato de API](ap
 - **Edição:** `make watch-laravel` copia cada edição para o `php-fpm`, onde ela vale na próxima requisição, e reinicia o `horizon`, porque um worker de longa duração não recarrega o código. O código entra por cópia, nunca por bind mount (decisão 20 de [decisions.md](decisions.md)).
 - **Dependências:** `make laravel-composer ARGS="<comando composer>"` é o único caminho, e só `composer.json` e `composer.lock` mudam na máquina.
 - **Testes:** Pest, em `app-modules/<nome>/tests`, rodando com `make test-laravel` num container descartável, com dependências simuladas. O comportamento contra PostgreSQL, Redis e Mailpit reais fica em `tests/infra`.
-- **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. `apis/laravel` não tem `.env`: as variáveis vêm do `.env` da raiz.
+- **Sem tabelas do framework:** sessão e cache em memória, fila no `redis`, falhas de job só no Horizon, log na saída de erro do container. As variáveis e os padrões locais estão no compose da stack; um `apis/laravel/.env` opcional sobrescreve só esta stack e nunca entra na imagem (decisão 29).
 
 **Como o outbox funciona aqui**
 - **Relay:** o comando `outbox:relay` é agendado com `everySecond()` e `withoutOverlapping()`, com a saída enviada ao log do container. Ele faz a seleção do lote e o `dispatch` do job de cada tipo de evento, escolhido por um `match` sobre `OutboxEventType`, hoje `SendWelcomeEmailJob`; um tipo desconhecido faz a rodada falhar sem publicar nada. O cache da stack é `array`, então `withoutOverlapping()` só vale dentro de um processo: quem impede duas execuções de publicar a mesma linha é o `SKIP LOCKED`.
@@ -239,7 +239,6 @@ frontend/
 cadastro-feliz/
 ├── README.md
 ├── Makefile
-├── .env.example
 ├── docker-compose.yml        # frontend, postgres, redis-limiter, mailpit e migrate
 ├── database/migrations/      # schema canônico em SQL
 ├── docs/

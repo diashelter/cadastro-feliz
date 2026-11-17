@@ -63,6 +63,7 @@ t_ns1_clean_clone() {
   services="$(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-nest --format '{{.Label "com.docker.compose.service"}}' | sort | tr '\n' ' ')"
   [ "$services" = 'api redis worker ' ] || { note "serviços: $services"; ok=1; }
   ns_healthy || { note "api $(health "$RG_API"), worker $(health "$RG_WK"), redis $(health "$RG_RD")"; ok=1; }
+  [ -z "$(env_files)" ] || { note "make criou: $(env_files)"; ok=1; }
   ids="$(ns_ids)"
   mkq up-nest || { note "segundo make up-nest saiu com erro"; ok=1; }
   [ "$(ns_ids)" = "$ids" ] || { note "os containers mudaram na segunda subida"; ok=1; }
@@ -157,7 +158,7 @@ check "NS6 failed check is logged not returned" t_ns6_logged_not_returned
 t_ns7_routes() {
   local ok=0 origin path headers
   rg_reset
-  origin="$(grep '^CORS_ALLOWED_ORIGIN=' "$WORK/.env" | cut -d= -f2-)"
+  origin="$(rg_origin)"
   [ "$(api_status localhost:8080/health)" = 200 ] || { note "GET /health"; ok=1; }
   [ "$(rg_register ana@example.com)" = 201 ] || { note "POST /users: $(rg_body)"; ok=1; }
   [ "$(api_status -X OPTIONS localhost:8080/users -H "Origin: $origin" -H 'Access-Control-Request-Method: POST')" = 204 ] || { note "OPTIONS /users"; ok=1; }

@@ -557,8 +557,6 @@ t_om15_variables() {
     grep -qx 'OUTBOX_ALERT_EMAIL=ops@cadastro-feliz.local' <<< "$env" || { note "$c sem OUTBOX_ALERT_EMAIL"; ok=1; }
     grep -qx 'OUTBOX_RETENTION_DAYS=7' <<< "$env" || { note "$c sem OUTBOX_RETENTION_DAYS"; ok=1; }
   done
-  grep -qx 'OUTBOX_ALERT_EMAIL=ops@cadastro-feliz.local' "$WORK/.env.example" || { note ".env.example sem OUTBOX_ALERT_EMAIL"; ok=1; }
-  grep -qx 'OUTBOX_RETENTION_DAYS=7' "$WORK/.env.example" || { note ".env.example sem OUTBOX_RETENTION_DAYS"; ok=1; }
   return $ok
 }
 check "OM15 containers receive the maintenance variables" t_om15_variables
@@ -566,8 +564,9 @@ check "OM15 containers receive the maintenance variables" t_om15_variables
 t_om23_compose_defaults() {
   local ok=0 env cfg
   env="$WORK/om23.env"
-  grep -vE '^OUTBOX_(RETENTION_DAYS|ALERT_EMAIL)=' "$WORK/.env.example" > "$env"
-  cfg="$(docker compose --env-file "$env" -f "$WORK/apis/laravel/docker-compose.yml" config --format json 2>/dev/null)" \
+  # O .env da stack, sem as duas variáveis, no lugar do que o Compose leria da pasta dela.
+  { [ -f "$WORK/apis/laravel/.env" ] && grep -vE '^OUTBOX_(RETENTION_DAYS|ALERT_EMAIL)=' "$WORK/apis/laravel/.env"; } > "$env"
+  cfg="$(env -u OUTBOX_RETENTION_DAYS -u OUTBOX_ALERT_EMAIL docker compose --env-file "$env" -f "$WORK/apis/laravel/docker-compose.yml" config --format json 2>/dev/null)" \
     || { note "docker compose config falhou"; return 1; }
   for s in php-fpm scheduler horizon; do
     [ "$(jq -r --arg s "$s" '.services[$s].environment.OUTBOX_RETENTION_DAYS' <<< "$cfg")" = 7 ] || { note "$s: retenção"; ok=1; }

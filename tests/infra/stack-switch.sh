@@ -18,8 +18,8 @@ sw_reset() {
   return 0
 }
 
-# sw_env <chave=valor>: troca um valor do .env da cópia de trabalho, sem subir nada.
-sw_env() { sed "s|^${1%%=*}=.*|$1|" "$WORK/.env" > "$WORK/.env.new" && mv "$WORK/.env.new" "$WORK/.env"; }
+# sw_env <chave=valor>: troca um valor do .env da NestJS na cópia de trabalho, sem subir nada.
+sw_env() { env_set apis/nestjs "$1"; }
 
 # sw_exactly_one <e-mail>: uma mensagem chega em até 60 s e nenhuma outra nos 10 s seguintes.
 sw_exactly_one() {

@@ -257,7 +257,8 @@ t_rg18_database_down() {
   [ "$body" = "$FAILED_BODY" ] || { note "corpo: $body"; ok=1; }
   rg_under_3s "$secs" || { note "levou ${secs}s"; ok=1; }
   [ "$after" = "$before" ] || { note "cota: antes $before, depois $after"; ok=1; }
-  grep -qx 'APP_DEBUG=true' "$WORK/.env" || { note ".env sem APP_DEBUG=true"; ok=1; }
+  [ "$SUITE_STACK" != laravel ] || [ "$(compose_env "$STACK_DIR/docker-compose.yml" php-fpm APP_DEBUG)" = true ] \
+    || { note "a Laravel sem APP_DEBUG=true"; ok=1; }
   return $ok
 }
 check "RG18 database down answers 500 and releases" t_rg18_database_down
@@ -290,7 +291,7 @@ check "RG19 queue down still answers 201" t_rg19_queue_down
 
 t_rg20_preflight() {
   local headers origin ok=0
-  origin="$(grep '^CORS_ALLOWED_ORIGIN=' "$WORK/.env" | cut -d= -f2-)"
+  origin="$(rg_origin)"
   headers="$(curl -s -D - -o /dev/null --max-time 10 -X OPTIONS localhost:8080/users -H "Origin: $origin" \
     -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' | tr -d '\r')"
   grep -qE '^HTTP/[0-9.]+ 204' <<< "$headers" || { note "status: $(head -1 <<< "$headers")"; ok=1; }
@@ -303,7 +304,7 @@ check "RG20 cors preflight" t_rg20_preflight
 t_rg21_cors_response() {
   local origin ok=0
   rg_reset
-  origin="$(grep '^CORS_ALLOWED_ORIGIN=' "$WORK/.env" | cut -d= -f2-)"
+  origin="$(rg_origin)"
   rg_post '{"name":"Ana","email":"ana@example.com"}' -H "Origin: $origin" >/dev/null
   [ "$(rg_header Access-Control-Allow-Origin)" = "$origin" ] || { note "origem: '$(rg_header Access-Control-Allow-Origin)'"; ok=1; }
   rg_header Access-Control-Expose-Headers | grep -qF Retry-After || { note "sem Retry-After em Expose-Headers"; ok=1; }

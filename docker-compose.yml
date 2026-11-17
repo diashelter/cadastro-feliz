@@ -1,4 +1,6 @@
 # Serviços comuns às três stacks. Referência: docs/infrastructure.md.
+# Cada variável tem o padrão local aqui; um .env opcional nesta pasta sobrescreve só este
+# projeto (decisão 29).
 # Use o Makefile: ele cria a rede externa e ordena este projeto, o migrate e a stack.
 name: cadastro-feliz-shared
 
@@ -6,9 +8,9 @@ services:
   postgres:
     image: postgres:18.6-alpine
     environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE:-cadastro_feliz}
+      POSTGRES_USER: ${DB_USERNAME:-cadastro_feliz}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cadastro_feliz}
     ports:
       - "5432:5432"
     volumes:
@@ -69,8 +71,8 @@ services:
       provenance: false
     image: cadastro-feliz-shared-frontend
     environment:
-      # Lido quando o container inicia; trocar o valor no .env não exige rebuild.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      # Lido quando o container inicia; trocar o valor no .env da raiz não exige rebuild.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     ports:
       - "3000:3000"
     healthcheck:
@@ -105,7 +107,7 @@ services:
       - ./database/migrations:/migrations:ro
     command:
       - -path=/migrations
-      - -database=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}?sslmode=disable
+      - -database=postgres://${DB_USERNAME:-cadastro_feliz}:${DB_PASSWORD:-cadastro_feliz}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_DATABASE:-cadastro_feliz}?sslmode=disable
       - up
 
 volumes:

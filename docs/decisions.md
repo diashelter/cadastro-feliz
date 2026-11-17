@@ -34,6 +34,7 @@
 | [26](#26-módulo-único-da-stack-laravel) | Módulo único da stack Laravel | Definida |
 | [27](#27-limpeza-e-aviso-de-falhas-de-users_outbox-na-stack-laravel) | Limpeza e aviso de falhas de `users_outbox` na stack Laravel | Definida |
 | [28](#28-limitador-de-cada-stack-sem-lua) | Limitador de cada stack, sem Lua | Definida |
+| [29](#29-variáveis-de-ambiente-por-projeto-compose) | Variáveis de ambiente por projeto Compose | Definida |
 
 ## 1. Transactional Outbox em vez de publicar direto na fila
 
@@ -382,3 +383,22 @@ O contador de tentativas e a cota por IP deixam de rodar scripts Lua do projeto.
 **Custos**
 - Um par bloqueado numa stack não fica bloqueado garantidamente na outra.
 - Se o processo cair entre um decremento negativo e a correção, o contador fica em -1 até a janela expirar, o que aceita um cadastro a mais nessa janela.
+
+## 29. Variáveis de ambiente por projeto Compose
+
+Cada projeto Compose (`cadastro-feliz-shared`, `cadastro-feliz-laravel`, `cadastro-feliz-nest`) declara as variáveis de que precisa, com o padrão local escrito no próprio compose: toda interpolação tem a forma `${NOME:-padrão}`, inclusive em `ports` e `command`. O `Makefile` chama o Compose sem `--env-file`, o alvo `make env` e o `.env.example` deixam de existir, e nenhum alvo cria arquivo de ambiente. Para trocar um valor, um `.env` opcional e ignorado pelo git, ao lado do compose, sobrescreve só aquele projeto: o da raiz vale para os serviços comuns, inclusive `NEXT_PUBLIC_API_URL`, e nenhuma variável de stack mora nele. O `.env` de uma stack nunca entra na imagem: `apis/laravel/.dockerignore` o exclui, como os do NestJS e do frontend já faziam. Os padrões das regras de negócio (`REGISTRATION_*` e `OUTBOX_*`) são os de [infrastructure.md](infrastructure.md#regras-de-negócio) em todas as stacks; sobrescrever localmente é livre. O detalhamento está no [design](../.design/env-per-project.md) e no [plano](../.specs/features/env-per-project/plan.md).
+
+**Substitui** o `.env.example` único na raiz (default 2 de [shared-infrastructure](../.design/shared-infrastructure.md)), o `.env` da raiz como única fonte das variáveis da Laravel (Key decision 7 de [laravel-api-base](../.design/laravel-api-base.md)) e, na Key decision 6 de [frontend-container](../.design/frontend-container.md), o `.env` da raiz como única fonte; o frontend continua sem `.env` próprio, e `NEXT_PUBLIC_API_URL` continua lido quando o container inicia.
+
+**Motivos**
+- **Sem `.env` desatualizado:** o `.env` copiado uma vez não recebia as variáveis novas, e uma variável ausente virava vazia em silêncio. Com o padrão no compose, a variável chega com o código.
+- **Cada projeto é dono do que usa:** uma variável nova de uma stack muda só o compose dela, e um valor trocado para um experimento afeta só aquela stack.
+- **O Compose já faz:** ele lê o `.env` da pasta do compose, não o de onde o comando é chamado, e interpola padrões; não há script nem arquivo novo.
+
+**Alternativas descartadas**
+- **Um `.env.example` por projeto, copiado no primeiro uso:** a divergência continuaria, em quatro arquivos.
+- **Um arquivo de padrões por projeto, lido como `env_file`:** dois mecanismos, porque `ports` e `command` ainda precisam de interpolação; só pagaria se as variáveis fossem lidas fora do Compose, e a POC roda só com Docker e `make`.
+
+**Custos**
+- Valores usados por vários projetos (`DB_*`, `CORS_ALLOWED_ORIGIN`, `API_PORT`) se repetem nos composes, e trocar um deles localmente é sobrescrever em cada projeto que o usa.
+- O `.env` antigo e completo de quem já clonou continua na raiz; os serviços comuns só leem dele as próprias variáveis, com os mesmos valores dos padrões, e as stacks não o enxergam.

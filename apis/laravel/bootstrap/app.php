@@ -19,8 +19,9 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(fn () => true);
     })->create();
 
-// apis/laravel não tem .env: as variáveis vêm do .env da raiz, pelo container. Sem o
-// arquivo, o Laravel nem tenta lê-lo (a leitura que falha vira aviso em `artisan test`).
+// O container não tem .env: as variáveis vêm do compose da stack, e o .env opcional de
+// apis/laravel fica fora da imagem (decisão 29). Sem o arquivo, o Laravel nem tenta lê-lo
+// (a leitura que falha vira aviso em `artisan test`).
 if (! is_file($app->environmentFilePath())) {
     $app->bind(LoadEnvironmentVariables::class, fn () => new class
     {

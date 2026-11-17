@@ -11,6 +11,11 @@ RG_API=cadastro-feliz-nest-api-1
 RG_WK=cadastro-feliz-nest-worker-1
 RG_RD=cadastro-feliz-nest-redis-1
 
+# O diretório do compose da stack, onde fica o .env opcional dela, e um serviço que recebe as
+# variáveis da API (decisão 29).
+STACK_DIR=apis/nestjs
+STACK_ENV_SERVICE=api
+
 # As ações nomeadas do worker (src/scripts/queue-control.ts), que desistem em 15 s.
 ns_queue_control() { docker exec "$RG_WK" node dist/scripts/queue-control.js "$@"; }
 
@@ -35,7 +40,7 @@ stack_queue_unfreeze() { docker unpause "$RG_RD" >/dev/null; }
 
 # Depois de make down-nest: só a fila, vazia, sem relay nem worker.
 stack_queue_up_alone() {
-  (cd "$WORK" && docker compose --env-file .env -f apis/nestjs/docker-compose.yml up --detach --wait redis) >/dev/null 2>&1
+  (cd "$WORK" && docker compose -f apis/nestjs/docker-compose.yml up --detach --wait redis) >/dev/null 2>&1
 }
 
 # As mensagens esperando em registration-emails: as da lista de espera e as de uma fila pausada.

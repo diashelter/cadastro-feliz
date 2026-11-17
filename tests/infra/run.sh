@@ -17,7 +17,7 @@ PG_VOLUME=cadastro-feliz-shared_postgres-data
 PORT_BLOCKER=cf-test-port-blocker
 
 # Arquivos de teste, na ordem em que rodam. O CI monta a matriz a partir desta lista.
-FILES=(docs.sh shared.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh laravel-outbox.sh nest.sh stack-switch.sh)
+FILES=(docs.sh shared.sh migrate.sh stack.sh frontend.sh test-frontend.sh laravel.sh registration.sh outbox.sh laravel-outbox.sh nest.sh stack-switch.sh env.sh)
 
 # Arquivos de contrato: valem para toda stack e rodam uma vez por adaptador de
 # tests/infra/adapters, como a entrada <arquivo>:<stack> (decisão 23 de docs/decisions.md).
@@ -182,6 +182,52 @@ shared_healthy() {
   for s in postgres redis-limiter mailpit; do
     [ "$(health "$(container "$s")")" = healthy ] || { note "$s não está healthy"; return 1; }
   done
+}
+
+# Variáveis de cada projeto Compose (decisão 29). Os composes ficam em caminhos relativos a $WORK.
+COMPOSES=(docker-compose.yml apis/laravel/docker-compose.yml apis/nestjs/docker-compose.yml)
+
+# env_set <diretório> <chave=valor>...: grava os pares no .env opcional do projeto em
+# $WORK/<diretório> (. para a raiz), trocando a linha da chave ou acrescentando-a.
+env_set() {
+  local f="$WORK/$1/.env" pair; shift
+  touch "$f"
+  for pair in "$@"; do
+    { grep -v "^${pair%%=*}=" "$f"; echo "$pair"; } > "$f.new" && mv "$f.new" "$f" || return 1
+  done
+}
+
+# env_files: os .env que existem na cópia de trabalho, um por linha.
+env_files() { find "$WORK" -name .env -not -path '*/node_modules/*' -not -path '*/vendor/*'; }
+
+# compose_env <compose> <serviço> <variável>: o valor que o Compose resolve, com o .env da pasta
+# do compose, se existir.
+compose_env() {
+  (cd "$WORK" && docker compose -f "$1" --profile '*' config --format json 2>/dev/null) \
+    | jq -r --arg s "$2" --arg v "$3" '.services[$s].environment[$v] // empty'
+}
+
+# compose_name <compose>: o projeto Compose, do `name:` do arquivo.
+compose_name() { sed -nE 's/^name: *//p' "$WORK/$1"; }
+
+# compose_defaults <compose>: uma linha <VARIÁVEL>=<padrão> por variável interpolada com padrão
+# não vazio, sem repetir.
+compose_defaults() {
+  sed -e 's/\$\$//g' -e '/^ *#/d' "$WORK/$1" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:-[^}]+\}' \
+    | sed -E 's/^\$\{([A-Za-z0-9_]+):-(.*)\}$/\1=\2/' | sort -u
+}
+
+# env_missing_defaults <compose>: imprime "<compose> <VARIÁVEL>" para cada variável interpolada
+# sem padrão não vazio no próprio compose. Lê o arquivo, então uma variável exportada no shell
+# não esconde a falta.
+env_missing_defaults() {
+  local ref name
+  sed -e 's/\$\$//g' -e '/^ *#/d' "$WORK/$1" \
+    | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*' | sort -u \
+    | while IFS= read -r ref; do
+        name="$(sed -E 's/^\$\{?([A-Za-z_][A-Za-z0-9_]*).*/\1/' <<< "$ref")"
+        grep -qE '^\$\{[A-Za-z_][A-Za-z0-9_]*:-[^}]+\}$' <<< "$ref" || echo "$1 $name"
+      done | sort -u
 }
 
 # Compose de uma stack falsa, usado por stack.sh e frontend.sh. Fica aqui porque

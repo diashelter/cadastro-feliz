@@ -67,17 +67,6 @@ t_lv10_repo_files() {
 }
 check "LV10 no vendor env or migrations in repo" t_lv10_repo_files
 
-t_lv11_env_example() {
-  local section key ok=0
-  section="$(awk '/^# Específicas de stack/{on=1; next} on && /^# /{exit} on' "$WORK/.env.example")"
-  key="$(grep -E '^APP_KEY=base64:' <<< "$section" | head -1 | cut -d: -f2-)"
-  [ -n "$key" ] || { note "APP_KEY=base64: ausente em Específicas de stack"; return 1; }
-  [ "$(printf '%s' "$key" | base64 -d 2>/dev/null | wc -c)" -eq 32 ] || { note "APP_KEY não decodifica em 32 bytes"; ok=1; }
-  grep -qxF 'APP_ENV=local' <<< "$section" || { note "sem APP_ENV=local"; ok=1; }
-  grep -qxF 'APP_DEBUG=true' <<< "$section" || { note "sem APP_DEBUG=true"; ok=1; }
-  return $ok
-}
-check "LV11 env example has laravel vars" t_lv11_env_example
 
 t_lv6_framework_locked() {
   local version
@@ -171,8 +160,27 @@ t_lv1_clean_clone() {
   [ "$(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}' | sort | tr '\n' ' ')" = "$HZ $NG $FPM $RD $SC " ] \
     || { note "containers do projeto: $(docker ps -a --filter label=com.docker.compose.project=cadastro-feliz-laravel --format '{{.Names}}')"; return 1; }
   status_is /health 200 || { note "GET /health respondeu $(api_status /health)"; return 1; }
+  [ -z "$(env_files)" ] || { note "make criou: $(env_files)"; return 1; }
 }
 check "LV1 up-laravel on clean clone" t_lv1_clean_clone
+
+# Sem nenhum .env, os três containers que rodam o Laravel recebem os padrões do compose da stack.
+t_lv11_compose_defaults() {
+  local c env key ok=0
+  [ -z "$(env_files)" ] || { note "há .env na cópia: $(env_files)"; return 1; }
+  for c in "$FPM" "$SC" "$HZ"; do
+    env="$(docker exec "$c" printenv)" || { note "$c fora do ar"; ok=1; continue; }
+    grep -qx 'APP_ENV=local' <<< "$env" || { note "$c sem APP_ENV=local"; ok=1; }
+    grep -qx 'APP_DEBUG=true' <<< "$env" || { note "$c sem APP_DEBUG=true"; ok=1; }
+    key="$(sed -nE 's/^APP_KEY=base64://p' <<< "$env")"
+    [ "$(printf '%s' "$key" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" = 32 ] || { note "$c: APP_KEY não é base64: com 32 bytes"; ok=1; }
+    grep -qx 'OUTBOX_RETENTION_DAYS=7' <<< "$env" || { note "$c sem OUTBOX_RETENTION_DAYS=7"; ok=1; }
+    grep -qx 'OUTBOX_ALERT_EMAIL=ops@cadastro-feliz.local' <<< "$env" || { note "$c sem OUTBOX_ALERT_EMAIL"; ok=1; }
+    grep -qx 'CORS_ALLOWED_ORIGIN=http://localhost:3000' <<< "$env" || { note "$c sem CORS_ALLOWED_ORIGIN"; ok=1; }
+  done
+  return $ok
+}
+check "LV11 laravel containers receive the compose defaults" t_lv11_compose_defaults
 
 t_lv51_image_modules() {
   local name
@@ -604,7 +612,7 @@ t_lv23_watch_starts() {
   add_probe_route
   start_watch
   wait_for 600 watch_ready || { note "watch não ficou pronto: $(tail -5 "$WORK/watch.log")"; return 1; }
-  [ -f "$WORK/.env" ] || { note "sem .env"; ok=1; }
+  [ -z "$(env_files)" ] || { note "make criou: $(env_files)"; ok=1; }
   network_exists || { note "sem a rede"; ok=1; }
   lv_healthy || { note "nginx $(health "$NG"), php-fpm $(health "$FPM"), horizon $(health "$HZ"), redis $(health "$RD"), scheduler $(health "$SC")"; ok=1; }
   status_is /probe 200 || { note "/probe respondeu $(api_status /probe)"; ok=1; }

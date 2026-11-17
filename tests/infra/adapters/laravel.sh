@@ -11,6 +11,11 @@ RG_HZ=cadastro-feliz-laravel-horizon-1
 RG_RD=cadastro-feliz-laravel-redis-1
 RG_SC=cadastro-feliz-laravel-scheduler-1
 
+# O diretório do compose da stack, onde fica o .env opcional dela, e um serviço que recebe as
+# variáveis da API (decisão 29).
+STACK_DIR=apis/laravel
+STACK_ENV_SERVICE=php-fpm
+
 # Só as chaves da fila e as falhas do Horizon: um FLUSHALL logo depois de o horizon subir
 # apaga o registro dos supervisores, e o master fica sem processar nada, ainda healthy.
 stack_reset_queue() {
@@ -34,7 +39,7 @@ stack_queue_unfreeze() { docker unpause "$RG_RD" >/dev/null; }
 
 # Depois de make down-laravel: só a fila, vazia, sem relay nem worker.
 stack_queue_up_alone() {
-  (cd "$WORK" && docker compose --env-file .env -f apis/laravel/docker-compose.yml up --detach --wait redis) >/dev/null 2>&1
+  (cd "$WORK" && docker compose -f apis/laravel/docker-compose.yml up --detach --wait redis) >/dev/null 2>&1
 }
 
 stack_queue_length() { docker exec "$RG_RD" redis-cli LLEN queues:registration-emails; }

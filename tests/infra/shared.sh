@@ -1,27 +1,10 @@
 # S1 - Serviços comuns saudáveis. Carregado por run.sh.
 
-t_c9_env_example() {
-  # Lê as tabelas de docs/infrastructure.md › Variáveis de ambiente.
-  local docs="$WORK/docs/infrastructure.md" example="$WORK/.env.example"
-  local expected
-  expected="$(awk '/^## Variáveis de ambiente/{on=1; next} /^## /{on=0} on' "$docs" \
-    | sed -nE 's/^\| `([A-Z_]+)` \| `([^`]*)` \|.*/\1=\2/p')"
-  local count
-  count="$(printf '%s\n' "$expected" | grep -c .)"
-  [ "$count" -eq 28 ] || { note "docs listam $count variáveis, esperado 28"; return 1; }
-  local line ok=0
-  while IFS= read -r line; do
-    grep -qxF "$line" "$example" || { note "falta em .env.example: $line"; ok=1; }
-  done <<< "$expected"
-  return $ok
-}
-check "C9 env example matches docs" t_c9_env_example
-
 t_c1_clean_clone() {
   [ ! -e "$WORK/.env" ] || return 1
   network_exists && return 1
   mkq up-shared || { note "make up-shared saiu com erro"; return 1; }
-  cmp -s "$WORK/.env" "$WORK/.env.example" || { note ".env difere de .env.example"; return 1; }
+  [ -z "$(env_files)" ] || { note "make criou: $(env_files)"; return 1; }
   network_exists || { note "rede ausente"; return 1; }
   shared_healthy
 }
@@ -101,7 +84,7 @@ t_c23_reset_limits() {
 check "C23 reset-limits empties limiter" t_c23_reset_limits
 
 t_c2_keeps_env() {
-  sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=outra/' "$WORK/.env"
+  env_set . DB_PASSWORD=outra
   local before="$WORK/.env.before"
   cp "$WORK/.env" "$before"
   mk up-shared >/dev/null 2>&1 || return 1
