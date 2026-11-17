@@ -2,6 +2,7 @@
 
 > Plan from this document. Each slice below carries its own shape - copy it, do not re-derive it.
 > Status: confirmed by responsável do projeto, 2026-11-16 (decisão já tomada; registrada, sem veredito encenado)
+> Nota, 2026-11-16: durante o build, a decisão 30 de docs/decisions.md removeu `tests/infra` e `make test-infra`. A slice `make test-infra` deixa de existir, e as Key decisions 2 e 5 valem como regras conferidas pelos checks da feature (.specs/features/env-per-project/checks.md), não por uma suíte de testes.
 
 ## Situation
 

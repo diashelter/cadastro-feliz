@@ -10,9 +10,9 @@ Quando isto sair, um clone limpo sobe qualquer projeto sem criar arquivo nenhum,
 
 ## Shape
 
-Reusa o mecanismo do próprio Compose, que lê o `.env` do diretório do compose (testado no Compose 5.6.1 com `-f` a partir da raiz) e já interpola valores padrão, como o compose da Laravel faz hoje com `OUTBOX_RETENTION_DAYS`; não há script nem arquivo de padrões novo. As regras que mudam o resultado - qual valor cada container recebe - ficam nos três composes, e `make test-infra` as alcança por `docker compose config`, por `docker exec ... printenv` e pelo comportamento da API.
+Reusa o mecanismo do próprio Compose, que lê o `.env` do diretório do compose (testado no Compose 5.6.1 com `-f` a partir da raiz) e já interpola valores padrão, como o compose da Laravel faz hoje com `OUTBOX_RETENTION_DAYS`; não há script nem arquivo de padrões novo. As regras que mudam o resultado - qual valor cada container recebe - ficam nos três composes, e são conferidas pelos checks desta feature, por `docker compose config` e subindo cada projeto; o repositório não tem testes de infraestrutura (decisão 30).
 
-1. quem desenvolve ou `tests/infra` (exists) -> `make up-shared`, `make migrate`, `make up-<stack>` e os demais alvos do `Makefile` (exists) - chamam o Compose sem apontar arquivo de ambiente e sem criar nenhum (door 1)
+1. quem desenvolve (exists) -> `make up-shared`, `make migrate`, `make up-<stack>` e os demais alvos do `Makefile` (exists) - chamam o Compose sem apontar arquivo de ambiente e sem criar nenhum (door 1)
 2. Docker Compose (exists) - lê o `.env` opcional ao lado do compose do projeto, se existir, e interpola cada variável com o valor dele ou com o padrão escrito no compose (door 1)
 3. `cadastro-feliz-shared` (exists) - `postgres`, `migrate` e `frontend` recebem `DB_*` e `NEXT_PUBLIC_API_URL`
 4. `cadastro-feliz-laravel` e `cadastro-feliz-nest` (exists) - os containers recebem as variáveis de que a stack precisa; a imagem da Laravel é construída sem o `.env` da stack
@@ -20,7 +20,7 @@ Reusa o mecanismo do próprio Compose, que lê o `.env` do diretório do compose
 
 ```mermaid
 flowchart TD
-    D[quem desenvolve / tests/infra - exists] -->|1. make up-*| M[Makefile - exists]
+    D[quem desenvolve - exists] -->|1. make up-*| M[Makefile - exists]
     M -->|1. docker compose -f, sem env-file| C[Docker Compose - exists]
     R[(.env da raiz - opcional)] -.->|2. sobrescreve| S
     L[(apis/laravel/.env - opcional)] -.->|2. sobrescreve| LV
@@ -46,8 +46,8 @@ flowchart TD
 | --- | --- |
 | domain | `.env` significava o arquivo da raiz, única fonte de todas as variáveis, criado por `make` a partir de `.env.example`. Passa a significar a sobrescrita opcional de um único projeto, ao lado do compose dele, que nenhum `make` cria. Quem depende do significado antigo: o alvo `env` do `Makefile` e todos os alvos que o chamam, o `--env-file .env` do `Makefile` e dos adaptadores de `tests/infra`, e o guarda de `apis/laravel/bootstrap/app.php`, que continua certo porque o arquivo nunca entra na imagem (door 2) |
 | stored data | nada a migrar. Um `.env` antigo e completo na raiz de quem já clonou continua funcionando: `cadastro-feliz-shared` só lê dele as próprias variáveis, com os mesmos valores dos padrões, e as stacks não o enxergam. Nenhum alvo o apaga |
-| readers | `tests/infra`: C1, C2 e C9 de `shared.sh`; FE1, FE4 e FE13 de `frontend.sh`; RF18 de `test-frontend.sh`; LV1, LV11 e LV23 de `laravel.sh`; RG18, RG20 e RG21 de `registration.sh`; NS7 de `nest.sh`; OM15 e OM23 de `laravel-outbox.sh`; IP13 de `docs.sh`; `rg_set_env` de `registration-helpers.sh`, usado por `outbox.sh`, `laravel-outbox.sh` e `nest.sh`; `sw_env` de `stack-switch.sh`; `stack_queue_up_alone` dos dois adaptadores; o `rm -f "$WORK/.env"` de `run.sh`. LV10 e FE12 continuam valendo como estão |
-| docs | docs/infrastructure.md (Status, a tabela do `Makefile`, a sequência de subida, as notas de `NEXT_PUBLIC_API_URL` e das variáveis da Laravel, e Variáveis de ambiente por projeto), docs/stacks.md (Laravel e a árvore), README (a árvore), docs/decisions.md (decisão 29) e uma nota nos três designs cujas decisões a 29 substitui |
+| readers | nenhum teste lê o `.env`: `tests/infra`, que lia e editava o `.env` da raiz em cerca de 40 pontos, sai nesta mesma entrega (decisão 30, S5). Os comentários de `RegistrationLimiterTest.php`, `registration-attempt-limiter.spec.ts` e `page.test.tsx` que citavam `tests/infra` mudam com ele |
+| docs | docs/infrastructure.md (Status, a tabela do `Makefile`, a sequência de subida, as notas de `NEXT_PUBLIC_API_URL` e das variáveis da Laravel, e Variáveis de ambiente por projeto), docs/stacks.md (Laravel e a árvore), README (a árvore), docs/decisions.md (decisão 29) e uma nota nos três designs cujas decisões a 29 substitui; para a decisão 30, o README, docs/infrastructure.md (Status, `Makefile` e Integração contínua), docs/stacks.md, docs/api-contract.md, docs/architecture.md e a decisão 23, marcada como substituída |
 
 Data: none - nenhum dado guardado muda; só configuração local.
 
@@ -105,18 +105,27 @@ A stack NestJS sobe com os padrões do próprio compose, e o `.env` dela muda s�
 
 ### S4: Regras que valem para todo projeto (P1)
 
-`make test-infra` impede que um compose volte a depender de um arquivo de ambiente ou que uma stack mude o padrão do contrato.
+Os composes e a documentação ficam coerentes entre si: nenhuma variável sem padrão, e os padrões das regras de negócio iguais aos da documentação.
 
 **Acceptance Criteria**
 
 14. The `docker compose config` de cada um dos três composes, numa cópia sem nenhum `.env`, SHALL resolver toda variável interpolada com valor não vazio, em `environment`, `ports` e `command`
-15. IF um compose interpola uma variável sem padrão THEN `make test-infra` SHALL falhar com uma linha que nomeia o compose e a variável
-    - `${OUTBOX_BATCH_SIZE}` sem padrão no compose do NestJS → a falha nomeia `apis/nestjs/docker-compose.yml` e `OUTBOX_BATCH_SIZE`; sem `.env` e com `OUTBOX_BATCH_SIZE` exportado no shell de quem roda → a falha acontece igual
-16. The padrão de cada `REGISTRATION_*` e de cada `OUTBOX_*` que um compose de stack declara SHALL ser igual ao valor de docs/infrastructure.md › Regras de negócio, e os dois composes de stack SHALL declarar os quatro `REGISTRATION_*` e `OUTBOX_BATCH_SIZE`, `OUTBOX_REPUBLISH_AFTER_SECONDS`, `OUTBOX_MAX_ATTEMPTS` e `OUTBOX_BACKOFF_BASE_SECONDS`
-    - `REGISTRATION_MAX_ATTEMPTS:-6` no compose da Laravel → `make test-infra` falha nomeando `cadastro-feliz-laravel` e `REGISTRATION_MAX_ATTEMPTS`; `OUTBOX_RETENTION_DAYS` ausente do compose do NestJS → passa
-17. The docs/infrastructure.md › Variáveis de ambiente SHALL listar cada variável que algum compose interpola, com o mesmo padrão dos composes e os projetos que a declaram, e cada variável listada SHALL ser declarada por algum compose, exceto `RABBITMQ_URL`, marcada como da stack Go
+15. The padrão de cada `REGISTRATION_*` e de cada `OUTBOX_*` que um compose de stack declara SHALL ser igual ao valor de docs/infrastructure.md › Regras de negócio, e os dois composes de stack SHALL declarar os quatro `REGISTRATION_*` e `OUTBOX_BATCH_SIZE`, `OUTBOX_REPUBLISH_AFTER_SECONDS`, `OUTBOX_MAX_ATTEMPTS` e `OUTBOX_BACKOFF_BASE_SECONDS`
+    - `REGISTRATION_MAX_ATTEMPTS:-6` no compose da Laravel → diverge; `OUTBOX_RETENTION_DAYS` ausente do compose do NestJS → coerente, porque só a Laravel a declara
+16. The docs/infrastructure.md › Variáveis de ambiente SHALL listar cada variável que algum compose interpola, com o mesmo padrão dos composes e os projetos que a declaram, e cada variável listada SHALL ser declarada por algum compose, exceto `RABBITMQ_URL`, marcada como da stack Go
     - os três composes declaram `DB_PASSWORD` com `cadastro_feliz` → uma linha, com os três projetos; docs com `DB_PASSWORD` `outra` → falha
-18. The docs/decisions.md SHALL ter a decisão 29 com a regra de door 1; os três designs que ela substitui SHALL ter uma nota que aponta para ela; e docs/infrastructure.md, docs/stacks.md e o README SHALL não citar `.env.example` nem dizer que o `.env` da raiz é a única fonte das variáveis
+17. The docs/decisions.md SHALL ter a decisão 29 com a regra de door 1; os três designs que ela substitui SHALL ter uma nota que aponta para ela; e docs/infrastructure.md, docs/stacks.md e o README SHALL não citar `.env.example` nem dizer que o `.env` da raiz é a única fonte das variáveis
+
+### S5: Só testes da aplicação (P1)
+
+O projeto deixa de ter testes de infraestrutura e suíte de contrato, e os testes da aplicação continuam passando (decisão 30, pedida pelo usuário durante o build).
+
+**Acceptance Criteria**
+
+18. The repositório SHALL não ter `tests/infra` nem `apis/nestjs/src/scripts`, o `Makefile` SHALL não ter o alvo `test-infra`, e o workflow de CI SHALL ter só os jobs de `make test-frontend`, `make test-laravel` e `make test-nest`
+    - `make test-infra` → `make` sai com erro, sem regra para o alvo
+19. The docs/decisions.md SHALL ter a decisão 30, com índice, e a decisão 23 SHALL estar marcada como substituída por ela; README, docs/infrastructure.md, docs/stacks.md, docs/api-contract.md, docs/architecture.md e o código das stacks e do frontend SHALL não citar `tests/infra`, `make test-infra` nem `run.sh`
+20. WHEN `make test-laravel`, `make test-nest` e `make test-frontend` rodam THEN cada um SHALL sair com `0`
 
 ## Out of scope
 
@@ -133,11 +142,10 @@ A stack NestJS sobe com os padrões do próprio compose, e o `.env` dela muda s�
 | Assumption | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
 | Valores repetidos entre projetos (`DB_*`, `CORS_ALLOWED_ORIGIN`, `API_PORT`) | declarados em cada projeto que os usa | Key decision 6 do design aprovado: nenhum projeto depende de outro para subir | y |
-| Regras de negócio por stack | sobrescrita local livre; padrão igual ao contrato, conferido por teste | resposta do usuário na descoberta: "Padrão igual ao contrato" | y |
+| Regras de negócio por stack | sobrescrita local livre; padrão igual ao contrato, conferido pelo check desta feature | resposta do usuário na descoberta: "Padrão igual ao contrato" | y |
 | Onde fica a sobrescrita dos serviços comuns | o `.env` da raiz, só para `cadastro-feliz-shared` | resposta do usuário na descoberta: "Mesma regra" | y |
-| Um teste que cria o `.env` de um projeto | apaga o arquivo ao terminar, para o próximo começar dos padrões | default do design, como os testes já apagam o `.env` da raiz hoje | n |
-| De onde os testes tiram a origem do CORS | do padrão do compose da stack, não de um arquivo | o arquivo deixa de existir num clone limpo; o valor continua `http://localhost:3000` | n |
-| Forma da tabela de docs/infrastructure.md | as três tabelas atuais, com uma coluna a mais com os projetos que declaram cada variável | mantém o formato que C9 e docs.sh já leem | n |
+| Testes de infraestrutura e suíte de contrato | removidos, com `make test-infra` e os jobs do CI; ficam só os testes da aplicação | pedido do usuário durante o build: "Não deveria haver um make test-infra" e "Remover tests/infra inteiro" | y |
+| Forma da tabela de docs/infrastructure.md | as três tabelas atuais, com uma coluna a mais com os projetos que declaram cada variável | mantém o formato das tabelas atuais | n |
 
 **Open questions:** none - all resolved or logged above.
 
